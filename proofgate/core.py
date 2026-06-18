@@ -5,7 +5,6 @@ import difflib
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +17,8 @@ DEMO_AFTER = """def is_valid_email(value):
     value = value.strip()
     return bool(value) and "@" in value
 """
+
+DEMO_CREATED_AT = "2026-06-18T17:00:00Z"
 
 
 @dataclass
@@ -185,7 +186,7 @@ class ReviewerAgent:
                 if safe_to_apply
                 else "Patch is blocked until scope and validation both pass."
             ),
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=DEMO_CREATED_AT,
         )
         room.send(
             self.handle,
@@ -224,4 +225,3 @@ def write_demo(output_dir: Path) -> dict[str, Path]:
 
 def _sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
-

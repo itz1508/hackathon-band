@@ -116,7 +116,7 @@
         "safe_to_apply": true,
         "human_action": "approve_or_reject",
         "decision_reason": "Patch stayed inside scope and validation passed.",
-        "created_at": "2026-06-18T17:06:09.067515+00:00"
+        "created_at": "2026-06-18T17:00:00Z"
       }
     }
   ]
