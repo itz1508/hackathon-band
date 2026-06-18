@@ -64,7 +64,7 @@ Fix a login validator so whitespace-only emails are rejected.
 Expected flow:
 
 ```text
-@Planner -> @Engineer -> @Tester -> @Reviewer -> Human
+@itz1508 -> @itz1508/planner -> @itz1508/engineer -> @itz1508/tester -> @itz1508/reviewer -> @itz1508
 ```
 
 Outcome:
@@ -97,3 +97,4 @@ ProofGate is useful for teams that want AI coding acceleration without losing ch
 ## What Is Not Included
 
 This public demo does not include private production workflow internals, private scoring formulas, or proprietary artifact contracts.
+

@@ -10,10 +10,21 @@ Create four external agents in Band:
 
 | Agent name | Handle | Responsibility |
 |---|---|---|
-| ProofGate Planner | `@Planner` | Scope the user request and define success criteria |
-| ProofGate Engineer | `@Engineer` | Produce the patch candidate and simulated diff |
-| ProofGate Tester | `@Tester` | Validate behavior, scope, and hashes |
-| ProofGate Reviewer | `@Reviewer` | Decide whether the proof packet reaches human apply |
+| ProofGate Planner | `@itz1508/planner` | Scope the user request and define success criteria |
+| ProofGate Engineer | `@itz1508/engineer` | Produce the patch candidate and simulated diff |
+| ProofGate Tester | `@itz1508/tester` | Validate behavior, scope, and hashes |
+| ProofGate Reviewer | `@itz1508/reviewer` | Decide whether the proof packet reaches human apply |
+
+After creation, copy each agent UUID into local `.env`.
+
+```text
+BAND_PLANNER_AGENT_ID=<planner agent UUID>
+BAND_ENGINEER_AGENT_ID=<engineer agent UUID>
+BAND_TESTER_AGENT_ID=<tester agent UUID>
+BAND_REVIEWER_AGENT_ID=<reviewer agent UUID>
+```
+
+The agent API keys also belong in `.env`. Do not commit `.env`.
 
 ## Required Platform Tools
 
@@ -40,9 +51,9 @@ Goal:
 Fix a login validator so whitespace-only emails are rejected.
 
 Rules:
-- Planner scopes the request and sends structured scope to @Engineer.
-- Engineer sends a patch candidate and diff to @Tester.
-- Tester sends validation results to @Reviewer.
+- Planner scopes the request and sends structured scope to @itz1508/engineer.
+- Engineer sends a patch candidate and diff to @itz1508/tester.
+- Tester sends validation results to @itz1508/reviewer.
 - Reviewer sends the final proof packet to the human.
 - Every handoff must use @mention routing.
 - The final proof packet must include what_wrong, why_it_matters, how_to_fix, simulated_diff, validation_summary, safe_to_apply, human_action, and decision_reason.
@@ -53,13 +64,13 @@ Rules:
 ### Planner
 
 ```text
-You are @Planner for ProofGate.
+You are @itz1508/planner for ProofGate.
 
 When the human asks for a code change:
 1. restate the task;
 2. define scoped_files;
 3. define success_criteria;
-4. send the result to @Engineer using a direct message.
+4. send the result to @itz1508/engineer using a direct message.
 
 Do not produce code. Your job is scope and handoff.
 ```
@@ -67,13 +78,13 @@ Do not produce code. Your job is scope and handoff.
 ### Engineer
 
 ```text
-You are @Engineer for ProofGate.
+You are @itz1508/engineer for ProofGate.
 
-When @Planner sends scope:
+When @itz1508/planner sends scope:
 1. produce the smallest patch candidate;
 2. produce a unified diff;
 3. include before_sha256 and after_sha256 if available;
-4. send the patch candidate to @Tester using a direct message.
+4. send the patch candidate to @itz1508/tester using a direct message.
 
 Do not approve the change. Your job is candidate implementation.
 ```
@@ -81,13 +92,13 @@ Do not approve the change. Your job is candidate implementation.
 ### Tester
 
 ```text
-You are @Tester for ProofGate.
+You are @itz1508/tester for ProofGate.
 
-When @Engineer sends a patch candidate:
+When @itz1508/engineer sends a patch candidate:
 1. validate the requested behavior;
 2. validate the scoped files;
 3. report all_tests_passed and scope_ok;
-4. send validation_summary to @Reviewer using a direct message.
+4. send validation_summary to @itz1508/reviewer using a direct message.
 
 Do not approve the human apply decision.
 ```
@@ -95,13 +106,13 @@ Do not approve the human apply decision.
 ### Reviewer
 
 ```text
-You are @Reviewer for ProofGate.
+You are @itz1508/reviewer for ProofGate.
 
-When @Tester sends validation:
+When @itz1508/tester sends validation:
 1. check scope_ok;
 2. check all_tests_passed;
 3. assemble the proof packet;
-4. send the final result to @Human.
+4. send the final result to @itz1508.
 
 The proof packet must include:
 - what_wrong
@@ -117,11 +128,11 @@ The proof packet must include:
 ## Expected Live Handoff
 
 ```text
-@Human -> @Planner
-@Planner -> @Engineer
-@Engineer -> @Tester
-@Tester -> @Reviewer
-@Reviewer -> @Human
+@itz1508 -> @itz1508/planner
+@itz1508/planner -> @itz1508/engineer
+@itz1508/engineer -> @itz1508/tester
+@itz1508/tester -> @itz1508/reviewer
+@itz1508/reviewer -> @itz1508
 ```
 
 ## Video Proof Checklist
@@ -129,10 +140,10 @@ The proof packet must include:
 Record these screen moments:
 
 1. Participant list showing the four external agents.
-2. Human message to `@Planner`.
-3. Planner direct message to `@Engineer`.
-4. Engineer direct message to `@Tester`.
-5. Tester direct message to `@Reviewer`.
+2. Human message to `@itz1508/planner`.
+3. Planner direct message to `@itz1508/engineer`.
+4. Engineer direct message to `@itz1508/tester`.
+5. Tester direct message to `@itz1508/reviewer`.
 6. Reviewer proof packet to human.
 7. Static dashboard or generated `proof_packet.sample.json`.
 

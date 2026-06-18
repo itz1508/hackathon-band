@@ -20,10 +20,10 @@ class ProofGateDemoTests(unittest.TestCase):
         transcript, _ = run_demo()
         senders = {message["sender"] for message in transcript["messages"]}
 
-        self.assertIn("@Planner", senders)
-        self.assertIn("@Engineer", senders)
-        self.assertIn("@Tester", senders)
-        self.assertIn("@Reviewer", senders)
+        self.assertIn("@itz1508/planner", senders)
+        self.assertIn("@itz1508/engineer", senders)
+        self.assertIn("@itz1508/tester", senders)
+        self.assertIn("@itz1508/reviewer", senders)
 
     def test_proof_packet_contains_simulated_diff_and_validation(self):
         _, proof = run_demo()
@@ -42,8 +42,8 @@ class ProofGateDemoTests(unittest.TestCase):
     def test_live_handoffs_use_direct_messages(self):
         handoffs = describe_live_handoffs()
 
-        self.assertEqual(handoffs[0]["from"], "@Human")
-        self.assertEqual(handoffs[-1]["to"], "@Human")
+        self.assertEqual(handoffs[0]["from"], "@itz1508")
+        self.assertEqual(handoffs[-1]["to"], "@itz1508")
         self.assertTrue(all(handoff["service"] == "send_direct_message_service" for handoff in handoffs))
 
 

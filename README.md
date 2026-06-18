@@ -6,10 +6,10 @@ ProofGate turns a risky AI code-change request into a shared Band coordination f
 
 ```text
 Human request
--> @Planner scopes the change
--> @Engineer proposes a patch
--> @Tester simulates validation
--> @Reviewer accepts or blocks the apply decision
+-> @itz1508/planner scopes the change
+-> @itz1508/engineer proposes a patch
+-> @itz1508/tester simulates validation
+-> @itz1508/reviewer accepts or blocks the apply decision
 -> Human sees the proof packet and chooses apply or reject
 ```
 
@@ -57,6 +57,8 @@ For a hosted submission URL, publish the `demo/` folder with GitHub Pages or ano
 
 No API keys are required for the local demo.
 
+For live Band setup, copy `.env.example` to `.env`, then fill the four Band agent IDs and API keys created in the Band dashboard.
+
 ## Repository Layout
 
 ```text
@@ -98,3 +100,4 @@ Use `docs/REMOTE_AGENT_TEMPLATE.md` to create the live Planner, Engineer, Tester
 ## Public Demo Boundary
 
 This repository is a hackathon demo. It does not include any private production kernel, private scoring formula, private artifact schema, or protected implementation details.
+

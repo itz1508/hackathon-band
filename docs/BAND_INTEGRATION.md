@@ -14,11 +14,11 @@ ProofGate maps that model directly:
 
 | ProofGate role | Band handle | Purpose |
 |---|---|---|
-| Planner Agent | `@Planner` | Scope the task and success criteria |
-| Engineer Agent | `@Engineer` | Produce the patch candidate |
-| Tester Agent | `@Tester` | Run simulated validation |
-| Reviewer Agent | `@Reviewer` | Decide whether the packet reaches human apply |
-| Human | `@Human` | Final approve or reject action |
+| Planner Agent | `@itz1508/planner` | Scope the task and success criteria |
+| Engineer Agent | `@itz1508/engineer` | Produce the patch candidate |
+| Tester Agent | `@itz1508/tester` | Run simulated validation |
+| Reviewer Agent | `@itz1508/reviewer` | Decide whether the packet reaches human apply |
+| Human | `@itz1508` | Final approve or reject action |
 
 ## Live Setup Boundary
 
@@ -48,3 +48,4 @@ See `docs/REMOTE_AGENT_TEMPLATE.md` for exact role prompts and live-room steps.
 ## Local Demo Reason
 
 The local room runner is included so judges can verify the product workflow without waiting on credentials or external service availability.
+

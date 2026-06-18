@@ -6,7 +6,7 @@ Source: Band of Agents Hackathon page, checked 2026-06-18.
 
 | Requirement | ProofGate status | Repo evidence |
 |---|---|---|
-| At least 3 agents | Met in demo | `@Planner`, `@Engineer`, `@Tester`, `@Reviewer` in `proofgate/core.py` |
+| At least 3 agents | Met in demo | `@itz1508/planner`, `@itz1508/engineer`, `@itz1508/tester`, `@itz1508/reviewer` in `proofgate/core.py` |
 | Agents collaborate through Band | Partially met in repo, requires live room proof for final submission | Local runner uses Band-style room, `@mention` routing, task events, and role handoff; `docs/BAND_INTEGRATION.md` documents live Band mapping |
 | Meaningful Band usage | Designed for requirement | Band-style room is the workflow backbone, not a final notification step |
 | Enterprise workflow | Met | Multi-agent software change control and human apply decision |
@@ -50,3 +50,4 @@ Mitigation:
 5. Show the generated proof packet.
 6. Show the dashboard.
 7. End with the business value: enterprise teams can use AI coding agents without letting unreviewed output reach apply.
+

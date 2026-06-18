@@ -3,32 +3,32 @@ const transcript = {
   routing_model: "@mention",
   messages: [
     {
-      sender: "@Human",
-      mention: "@Planner",
+      sender: "@itz1508",
+      mention: "@itz1508/planner",
       message_type: "text",
       content: "Fix a login validator so whitespace-only emails are rejected."
     },
     {
-      sender: "@Planner",
-      mention: "@Engineer",
+      sender: "@itz1508/planner",
+      mention: "@itz1508/engineer",
       message_type: "task",
       content: "Scope approved. Produce the smallest patch candidate."
     },
     {
-      sender: "@Engineer",
-      mention: "@Tester",
+      sender: "@itz1508/engineer",
+      mention: "@itz1508/tester",
       message_type: "tool_result",
       content: "Patch candidate ready. Validate behavior and scope."
     },
     {
-      sender: "@Tester",
-      mention: "@Reviewer",
+      sender: "@itz1508/tester",
+      mention: "@itz1508/reviewer",
       message_type: "tool_result",
       content: "Validation passed. Review proof packet readiness."
     },
     {
-      sender: "@Reviewer",
-      mention: "@Human",
+      sender: "@itz1508/reviewer",
+      mention: "@itz1508",
       message_type: "task",
       content: "Proof packet ready for human apply decision."
     }
@@ -78,4 +78,5 @@ for (const test of proof.validation_summary.tests_run) {
   node.innerHTML = `<strong>${test.name}</strong><span>${test.status}</span>`;
   tests.appendChild(node);
 }
+
 

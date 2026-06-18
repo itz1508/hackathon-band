@@ -48,6 +48,7 @@ htmlcov/
 # Secrets and local Band credentials
 .env
 .env.*
+!.env.example
 agent_config.yaml
 *agent_config*.yaml
 

@@ -80,7 +80,7 @@ class BandRoom:
 
 
 class PlannerAgent:
-    handle = "@Planner"
+    handle = "@itz1508/planner"
 
     def run(self, room: BandRoom, request: str) -> dict[str, Any]:
         plan = {
@@ -96,7 +96,7 @@ class PlannerAgent:
         }
         room.send(
             self.handle,
-            "@Engineer",
+            "@itz1508/engineer",
             "Scope approved. Produce the smallest patch candidate.",
             "task",
             plan,
@@ -105,7 +105,7 @@ class PlannerAgent:
 
 
 class EngineerAgent:
-    handle = "@Engineer"
+    handle = "@itz1508/engineer"
 
     def run(self, room: BandRoom, plan: dict[str, Any]) -> dict[str, Any]:
         diff = "\n".join(
@@ -125,7 +125,7 @@ class EngineerAgent:
         }
         room.send(
             self.handle,
-            "@Tester",
+            "@itz1508/tester",
             "Patch candidate ready. Validate behavior and scope.",
             "tool_result",
             patch,
@@ -134,7 +134,7 @@ class EngineerAgent:
 
 
 class TesterAgent:
-    handle = "@Tester"
+    handle = "@itz1508/tester"
 
     def run(self, room: BandRoom, plan: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         validation = {
@@ -151,7 +151,7 @@ class TesterAgent:
         }
         room.send(
             self.handle,
-            "@Reviewer",
+            "@itz1508/reviewer",
             "Validation passed. Review proof packet readiness.",
             "tool_result",
             validation,
@@ -160,7 +160,7 @@ class TesterAgent:
 
 
 class ReviewerAgent:
-    handle = "@Reviewer"
+    handle = "@itz1508/reviewer"
 
     def run(
         self,
@@ -190,7 +190,7 @@ class ReviewerAgent:
         )
         room.send(
             self.handle,
-            "@Human",
+            "@itz1508",
             "Proof packet ready for human apply decision.",
             "task",
             asdict(packet),
@@ -202,7 +202,7 @@ def run_demo() -> tuple[dict[str, Any], dict[str, Any]]:
     """Run the full local multi-agent demo and return transcript plus proof."""
     room = BandRoom("proofgate-demo-room")
     request = "Fix a login validator so whitespace-only emails are rejected."
-    room.send("@Human", "@Planner", request, "text", {"intent": "code_change"})
+    room.send("@itz1508", "@itz1508/planner", request, "text", {"intent": "code_change"})
 
     plan = PlannerAgent().run(room, request)
     patch = EngineerAgent().run(room, plan)

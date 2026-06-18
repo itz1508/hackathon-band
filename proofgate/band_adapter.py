@@ -19,10 +19,10 @@ class BandAgentConfig:
 
 
 BAND_AGENTS = [
-    BandAgentConfig("planner", "@Planner", "BAND_PLANNER_AGENT_ID", "BAND_PLANNER_API_KEY"),
-    BandAgentConfig("engineer", "@Engineer", "BAND_ENGINEER_AGENT_ID", "BAND_ENGINEER_API_KEY"),
-    BandAgentConfig("tester", "@Tester", "BAND_TESTER_AGENT_ID", "BAND_TESTER_API_KEY"),
-    BandAgentConfig("reviewer", "@Reviewer", "BAND_REVIEWER_AGENT_ID", "BAND_REVIEWER_API_KEY"),
+    BandAgentConfig("planner", "@itz1508/planner", "BAND_PLANNER_AGENT_ID", "BAND_PLANNER_API_KEY"),
+    BandAgentConfig("engineer", "@itz1508/engineer", "BAND_ENGINEER_AGENT_ID", "BAND_ENGINEER_API_KEY"),
+    BandAgentConfig("tester", "@itz1508/tester", "BAND_TESTER_AGENT_ID", "BAND_TESTER_API_KEY"),
+    BandAgentConfig("reviewer", "@itz1508/reviewer", "BAND_REVIEWER_AGENT_ID", "BAND_REVIEWER_API_KEY"),
 ]
 
 
@@ -60,7 +60,7 @@ BAND_TOOL_CONTRACTS = [
         payload_shape={
             "chat_id": "<band_chat_id>",
             "participant_id": "<target_participant_id>",
-            "message": "@Engineer <structured payload>",
+            "message": "@itz1508/engineer <structured payload>",
         },
     ),
     BandToolContract(
@@ -74,34 +74,34 @@ BAND_TOOL_CONTRACTS = [
 
 LIVE_HANDOFFS = [
     {
-        "from": "@Human",
-        "to": "@Planner",
+        "from": "@itz1508",
+        "to": "@itz1508/planner",
         "service": "send_direct_message_service",
-        "message": "@Planner Fix a login validator so whitespace-only emails are rejected.",
+        "message": "@itz1508/planner Fix a login validator so whitespace-only emails are rejected.",
     },
     {
-        "from": "@Planner",
-        "to": "@Engineer",
+        "from": "@itz1508/planner",
+        "to": "@itz1508/engineer",
         "service": "send_direct_message_service",
-        "message": "@Engineer Scope approved. Produce the smallest patch candidate.",
+        "message": "@itz1508/engineer Scope approved. Produce the smallest patch candidate.",
     },
     {
-        "from": "@Engineer",
-        "to": "@Tester",
+        "from": "@itz1508/engineer",
+        "to": "@itz1508/tester",
         "service": "send_direct_message_service",
-        "message": "@Tester Patch candidate ready. Validate behavior and scope.",
+        "message": "@itz1508/tester Patch candidate ready. Validate behavior and scope.",
     },
     {
-        "from": "@Tester",
-        "to": "@Reviewer",
+        "from": "@itz1508/tester",
+        "to": "@itz1508/reviewer",
         "service": "send_direct_message_service",
-        "message": "@Reviewer Validation passed. Review proof packet readiness.",
+        "message": "@itz1508/reviewer Validation passed. Review proof packet readiness.",
     },
     {
-        "from": "@Reviewer",
-        "to": "@Human",
+        "from": "@itz1508/reviewer",
+        "to": "@itz1508",
         "service": "send_direct_message_service",
-        "message": "@Human Proof packet ready for approve/reject.",
+        "message": "@itz1508 Proof packet ready for approve/reject.",
     },
 ]
 

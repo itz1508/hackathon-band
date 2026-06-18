@@ -3,8 +3,8 @@
   "routing_model": "@mention",
   "messages": [
     {
-      "sender": "@Human",
-      "mention": "@Planner",
+      "sender": "@itz1508",
+      "mention": "@itz1508/planner",
       "message_type": "text",
       "content": "Fix a login validator so whitespace-only emails are rejected.",
       "payload": {
@@ -12,8 +12,8 @@
       }
     },
     {
-      "sender": "@Planner",
-      "mention": "@Engineer",
+      "sender": "@itz1508/planner",
+      "mention": "@itz1508/engineer",
       "message_type": "task",
       "content": "Scope approved. Produce the smallest patch candidate.",
       "payload": {
@@ -31,8 +31,8 @@
       }
     },
     {
-      "sender": "@Engineer",
-      "mention": "@Tester",
+      "sender": "@itz1508/engineer",
+      "mention": "@itz1508/tester",
       "message_type": "tool_result",
       "content": "Patch candidate ready. Validate behavior and scope.",
       "payload": {
@@ -45,8 +45,8 @@
       }
     },
     {
-      "sender": "@Tester",
-      "mention": "@Reviewer",
+      "sender": "@itz1508/tester",
+      "mention": "@itz1508/reviewer",
       "message_type": "tool_result",
       "content": "Validation passed. Review proof packet readiness.",
       "payload": {
@@ -75,8 +75,8 @@
       }
     },
     {
-      "sender": "@Reviewer",
-      "mention": "@Human",
+      "sender": "@itz1508/reviewer",
+      "mention": "@itz1508",
       "message_type": "task",
       "content": "Proof packet ready for human apply decision.",
       "payload": {
