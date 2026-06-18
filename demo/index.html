@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ProofGate for Band</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Band of Agents Hackathon</p>
+          <h1>ProofGate</h1>
+          <p class="lede">A multi-agent control room for AI code changes. Planner, Engineer, Tester, and Reviewer agents coordinate through a Band-style room before a human can apply the change.</p>
+        </div>
+        <div class="decision">
+          <span class="label">Decision</span>
+          <strong id="decision">Ready for human apply</strong>
+          <span id="reason">Patch stayed inside scope and validation passed.</span>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="panel room">
+          <h2>Band Room Transcript</h2>
+          <div id="messages" class="messages"></div>
+        </article>
+
+        <article class="panel">
+          <h2>Proof Packet</h2>
+          <dl class="packet">
+            <dt>What is wrong</dt>
+            <dd id="whatWrong"></dd>
+            <dt>Why it matters</dt>
+            <dd id="whyMatters"></dd>
+            <dt>How to fix it</dt>
+            <dd id="howFix"></dd>
+          </dl>
+        </article>
+
+        <article class="panel">
+          <h2>Simulated Diff</h2>
+          <pre id="diff"></pre>
+        </article>
+
+        <article class="panel">
+          <h2>Validation</h2>
+          <ul id="tests" class="tests"></ul>
+        </article>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
+
