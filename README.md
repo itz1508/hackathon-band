@@ -93,6 +93,8 @@ The hackathon demo can run fully offline, but `proofgate/band_adapter.py` mirror
 
 The adapter is deliberately isolated so credentials never enter the repository.
 
+Use `docs/REMOTE_AGENT_TEMPLATE.md` to create the live Planner, Engineer, Tester, and Reviewer agents in Band.
+
 ## Public Demo Boundary
 
 This repository is a hackathon demo. It does not include any private production kernel, private scoring formula, private artifact schema, or protected implementation details.

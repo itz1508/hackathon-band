@@ -31,7 +31,20 @@ For a live room:
 3. Export the environment variables listed by `proofgate.band_adapter.describe_live_band_setup()`.
 4. Connect each role to the Band SDK.
 
+## Platform Tool Usage
+
+The live template uses the Band platform tools visible to remote agents:
+
+- `list_available_participants_service`
+- `add_participant_service`
+- `list_chat_participants_service`
+- `send_direct_message_service`
+- `remove_participant_service`
+
+The important tool is `send_direct_message_service`: every ProofGate handoff should move through a direct `@mention` message inside the Band room.
+
+See `docs/REMOTE_AGENT_TEMPLATE.md` for exact role prompts and live-room steps.
+
 ## Local Demo Reason
 
 The local room runner is included so judges can verify the product workflow without waiting on credentials or external service availability.
-

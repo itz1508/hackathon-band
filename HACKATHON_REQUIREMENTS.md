@@ -37,7 +37,7 @@ Mitigation:
    - Engineer
    - Tester
    - Reviewer
-2. Use the same handles and handoff order shown in `proofgate/core.py`.
+2. Use the same handles and handoff order shown in `proofgate/core.py` and `docs/REMOTE_AGENT_TEMPLATE.md`.
 3. Record the Band chat room showing the handoffs.
 4. Include the GitHub repo and dashboard link in the lablab submission.
 
@@ -50,4 +50,3 @@ Mitigation:
 5. Show the generated proof packet.
 6. Show the dashboard.
 7. End with the business value: enterprise teams can use AI coding agents without letting unreviewed output reach apply.
-

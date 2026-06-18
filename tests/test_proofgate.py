@@ -1,6 +1,7 @@
 import unittest
 
 from proofgate.core import run_demo
+from proofgate.band_adapter import describe_band_tool_contracts, describe_live_handoffs
 
 
 class ProofGateDemoTests(unittest.TestCase):
@@ -31,7 +32,20 @@ class ProofGateDemoTests(unittest.TestCase):
         self.assertTrue(proof["validation_summary"]["all_tests_passed"])
         self.assertTrue(proof["validation_summary"]["scope_ok"])
 
+    def test_band_tool_contract_includes_required_handoff_service(self):
+        services = {contract["service"] for contract in describe_band_tool_contracts()}
+
+        self.assertIn("send_direct_message_service", services)
+        self.assertIn("add_participant_service", services)
+        self.assertIn("list_available_participants_service", services)
+
+    def test_live_handoffs_use_direct_messages(self):
+        handoffs = describe_live_handoffs()
+
+        self.assertEqual(handoffs[0]["from"], "@Human")
+        self.assertEqual(handoffs[-1]["to"], "@Human")
+        self.assertTrue(all(handoff["service"] == "send_direct_message_service" for handoff in handoffs))
+
 
 if __name__ == "__main__":
     unittest.main()
-
