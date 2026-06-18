@@ -256,11 +256,16 @@ async def run_remote_agent_forever(role: str) -> None:
     while True:
         try:
             await run_remote_agent(role)
+        except KeyboardInterrupt:
+            return
         except asyncio.CancelledError:
-            raise
+            return
         except Exception as exc:
             print(f"ProofGate {role} agent disconnected: {type(exc).__name__}. Reconnecting in {RECONNECT_DELAY_SECONDS:g}s.")
-            await asyncio.sleep(RECONNECT_DELAY_SECONDS)
+            try:
+                await asyncio.sleep(RECONNECT_DELAY_SECONDS)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                return
 
 
 def main() -> int:
@@ -275,10 +280,13 @@ def main() -> int:
     runner = run_remote_agent if args.no_reconnect else run_remote_agent_forever
     try:
         asyncio.run(runner(args.role))
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         print(f"ProofGate {args.role} agent stopped.")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        raise SystemExit(0)
