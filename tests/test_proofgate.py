@@ -1,7 +1,10 @@
 import unittest
+from http.client import HTTPConnection
+from threading import Thread
 
 from proofgate.core import run_demo
 from proofgate.band_adapter import describe_band_tool_contracts, describe_live_handoffs
+from proofgate.server import ProofGateRequestHandler, ThreadingHTTPServer
 
 
 class ProofGateDemoTests(unittest.TestCase):
@@ -45,6 +48,22 @@ class ProofGateDemoTests(unittest.TestCase):
         self.assertEqual(handoffs[0]["from"], "@itz1508")
         self.assertEqual(handoffs[-1]["to"], "@itz1508")
         self.assertTrue(all(handoff["service"] == "send_direct_message_service" for handoff in handoffs))
+
+    def test_server_exposes_proof_packet_endpoint(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), ProofGateRequestHandler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            connection = HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+            connection.request("GET", "/api/proof-packet")
+            response = connection.getresponse()
+            body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("safe_to_apply", body)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
 
 if __name__ == "__main__":

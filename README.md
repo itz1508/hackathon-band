@@ -47,13 +47,25 @@ Run tests:
 python -m unittest discover -s tests
 ```
 
+Run the backend dashboard:
+
+```bash
+python -m proofgate.server
+```
+
+Open:
+
+```text
+http://127.0.0.1:8787
+```
+
 Open the dashboard:
 
 ```text
 demo/index.html
 ```
 
-For a hosted submission URL, publish the `demo/` folder with GitHub Pages or another static host.
+`demo/index.html` also works as a static fallback. The backend dashboard is better for the hackathon video because it serves `/api/transcript`, `/api/proof-packet`, and `/api/run-demo`.
 
 No API keys are required for the local demo.
 
@@ -63,6 +75,7 @@ For live Band setup, copy `.env.example` to `.env`, then fill the four Band agen
 
 ```text
 proofgate/                 Core demo engine
+proofgate/server.py        Local backend dashboard and JSON API
 proofgate/band_adapter.py  Band SDK integration boundary
 demo/                      Static dashboard for judging/video
 docs/                      Submission notes and generated sample packets
