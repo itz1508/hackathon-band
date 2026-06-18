@@ -11,6 +11,7 @@ from proofgate.remote_agent import (
     ProofGateDirectAdapter,
     ROLE_NOTES,
     ROLE_TARGETS,
+    ROLE_TARGET_LABELS,
     main as remote_agent_main,
 )
 from proofgate.server import ProofGateRequestHandler, ThreadingHTTPServer
@@ -132,6 +133,7 @@ class ProofGateDemoTests(unittest.TestCase):
     def test_remote_agent_roles_are_defined(self):
         self.assertEqual(set(ROLE_NOTES), {"planner", "engineer", "tester", "reviewer"})
         self.assertEqual(set(ROLE_TARGETS), set(ROLE_NOTES))
+        self.assertEqual(set(ROLE_TARGET_LABELS), set(ROLE_NOTES))
 
     def test_remote_agent_cli_uses_defined_roles(self):
         self.assertIsNotNone(remote_agent_main)
@@ -220,7 +222,8 @@ class ProofGateDemoTests(unittest.TestCase):
             sent = tools.messages_sent[0]
             self.assertEqual(sent["mentions"], ["@itz1508/tester"])
             self.assertIn("provider_status: deterministic_fallback", sent["content"])
-            self.assertIn("<redacted>", sent["content"])
+            self.assertIn("handoff_to: Tester", sent["content"])
+            self.assertNotIn("provider_reason", sent["content"])
             self.assertNotIn("rc_1234567890abcdef", sent["content"])
 
         import asyncio
@@ -249,6 +252,7 @@ class ProofGateDemoTests(unittest.TestCase):
             sent = tools.messages_sent[0]
             self.assertEqual(sent["mentions"], ["@itz1508/reviewer"])
             self.assertIn("validation_summary", sent["content"])
+            self.assertIn("handoff_to: Reviewer", sent["content"])
 
         import asyncio
 
