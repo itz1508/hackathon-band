@@ -7,39 +7,33 @@ Source: Band of Agents Hackathon page, checked 2026-06-18.
 | Requirement | ProofGate status | Repo evidence |
 |---|---|---|
 | At least 3 agents | Met in demo | `@itz1508/planner`, `@itz1508/engineer`, `@itz1508/tester`, `@itz1508/reviewer` in `proofgate/core.py` |
-| Agents collaborate through Band | Partially met in repo, requires live room proof for final submission | Local runner uses Band-style room, `@mention` routing, task events, and role handoff; `docs/BAND_INTEGRATION.md` documents live Band mapping |
+| Agents collaborate through Band | Met in live demo | Four Band remote agents were created and a live Band chat room showed Planner -> Engineer -> Tester -> Reviewer -> Human handoffs |
 | Meaningful Band usage | Designed for requirement | Band-style room is the workflow backbone, not a final notification step |
 | Enterprise workflow | Met | Multi-agent software change control and human apply decision |
-| Public GitHub repository | Must be public before submission | `https://github.com/itz1508/hackathon-band` |
+| Public GitHub repository | Met | `https://github.com/itz1508/hackathon-band` |
 | Demo application platform | Met as static demo | `demo/index.html` |
 | Application URL | Needs hosting if lablab form requires URL | Can use GitHub Pages or any static host for `demo/` |
-| Video presentation | Needs recording | Recommended 2-3 minute walkthrough showing room transcript, proof packet, and dashboard |
-| Slide presentation | Needs export/upload | Use `SUBMISSION.md` as slide script |
+| Video presentation | Ready to record/upload | Use the clean Band session, local dashboard, and `docs/demo_captions.srt` |
+| Slide presentation | Ready from outline | Use `docs/FINAL_SUBMISSION_PACKET.md` slide outline |
 
 ## Honest Compliance Status
 
-ProofGate is ready as a runnable demo package and public repo.
-
-For strongest judging, run or record the workflow inside an actual Band chat room before submitting. The current repo includes the integration boundary and the same message model, but a local transcript is not the same as live Band execution.
+ProofGate is ready as a runnable demo package, public repo, local dashboard, and live Band room proof.
 
 ## Submission Risk
 
 Main risk:
 
 ```text
-Judges may require proof that the agents collaborated through Band itself, not only a local Band-style simulator.
+The dashboard is local at http://127.0.0.1:8787, so judges need the video and GitHub repo if no public hosting URL is provided.
 ```
 
 Mitigation:
 
-1. Create four external agents in Band:
-   - Planner
-   - Engineer
-   - Tester
-   - Reviewer
-2. Use the same handles and handoff order shown in `proofgate/core.py` and `docs/REMOTE_AGENT_TEMPLATE.md`.
-3. Record the Band chat room showing the handoffs.
-4. Include the GitHub repo and dashboard link in the lablab submission.
+1. Record the live Band chat room showing the four-agent handoff.
+2. Record the local dashboard at `http://127.0.0.1:8787`.
+3. Include the public GitHub repo in the lablab submission.
+4. If a public application URL is mandatory, use the GitHub repo URL or deploy the static `demo/` folder.
 
 ## Fast Video Script
 
