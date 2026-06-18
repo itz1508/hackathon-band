@@ -221,10 +221,38 @@ class ProofGateDemoTests(unittest.TestCase):
 
             sent = tools.messages_sent[0]
             self.assertEqual(sent["mentions"], ["@itz1508/tester"])
-            self.assertIn("provider_status: deterministic_fallback", sent["content"])
             self.assertIn("handoff_to: Tester", sent["content"])
+            self.assertNotIn("provider_status", sent["content"])
             self.assertNotIn("provider_reason", sent["content"])
             self.assertNotIn("rc_1234567890abcdef", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
+    def test_direct_adapter_suppresses_duplicate_incoming_content(self):
+        async def run_case():
+            adapter = ProofGateDirectAdapter(
+                role="reviewer",
+                llm_client=None,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+            message = FakeMessage("Same validation summary.", sender_name="@itz1508/tester")
+
+            for _ in range(3):
+                await adapter.on_message(
+                    msg=message,
+                    tools=tools,
+                    history=SimpleNamespace(raw=[]),
+                    participants_msg=None,
+                    contacts_msg=None,
+                    is_session_bootstrap=False,
+                    room_id="room-1",
+                )
+
+            self.assertEqual(len(tools.messages_sent), 1)
+            self.assertEqual(tools.messages_sent[0]["mentions"], ["@itz1508"])
 
         import asyncio
 

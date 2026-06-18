@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import os
 from pathlib import Path
 from typing import Any
@@ -63,6 +64,7 @@ class ProofGateDirectAdapter:
         self.model = model
         self.agent_name = ""
         self.agent_description = ""
+        self._processed_fingerprints: set[str] = set()
 
     async def on_started(self, agent_name: str, agent_description: str) -> None:
         self.agent_name = agent_name
@@ -95,6 +97,10 @@ class ProofGateDirectAdapter:
     ) -> None:
         target = ROLE_TARGETS[self.role]
         user_prompt = self._user_prompt(msg, history, participants_msg, contacts_msg)
+        fingerprint = self._message_fingerprint(room_id, user_prompt)
+        if fingerprint in self._processed_fingerprints:
+            return
+        self._processed_fingerprints.add(fingerprint)
         if self.llm_client is None:
             content = self._fallback_content()
         else:
@@ -155,6 +161,11 @@ class ProofGateDirectAdapter:
             formatted.append(f"[{sender}]: {content}")
         return "\n".join(formatted)
 
+    def _message_fingerprint(self, room_id: str, user_prompt: str) -> str:
+        normalized = " ".join(user_prompt.split())
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+        return f"{room_id}:{self.role}:{digest}"
+
     def _extract_content(self, response: Any) -> str:
         try:
             content = response.choices[0].message.content
@@ -174,7 +185,6 @@ class ProofGateDirectAdapter:
         target_label = ROLE_TARGET_LABELS[self.role]
         if self.role == "planner":
             return (
-                "provider_status: deterministic_fallback\n"
                 "what_wrong: The login validator accepts whitespace-only input because the request has not been scoped into a bounded patch yet.\n"
                 "why_it_matters: Without scoped files and success criteria, an implementation agent can change unrelated code or overclaim readiness.\n"
                 "how_to_fix: Limit the change to demo_repo/auth.py and require whitespace-only emails to be rejected while normal emails still pass.\n"
@@ -184,7 +194,6 @@ class ProofGateDirectAdapter:
             )
         if self.role == "engineer":
             return (
-                "provider_status: deterministic_fallback\n"
                 "what_wrong: demo_repo/auth.py currently checks only for an at sign.\n"
                 "why_it_matters: Whitespace-only or malformed identity input can move downstream as if validation succeeded.\n"
                 "how_to_fix: Strip the value, reject empty strings, and keep the at-sign check.\n"
@@ -193,7 +202,6 @@ class ProofGateDirectAdapter:
             )
         if self.role == "tester":
             return (
-                "provider_status: deterministic_fallback\n"
                 "what_wrong: Patch readiness needs behavior and scope validation before review.\n"
                 "why_it_matters: A diff alone does not prove the requested failure mode was resolved.\n"
                 "how_to_fix: Validate whitespace rejection, normal email acceptance, and single-file scope.\n"
@@ -201,7 +209,6 @@ class ProofGateDirectAdapter:
                 f"handoff_to: {target_label}"
             )
         return (
-            "provider_status: deterministic_fallback\n"
             "what_wrong: The original validator accepts invalid whitespace-only identity input.\n"
             "why_it_matters: Bad identity input can pass into login and account flows.\n"
             "how_to_fix: Strip the value, reject empty strings, and keep the existing at-sign check inside demo_repo/auth.py.\n"
