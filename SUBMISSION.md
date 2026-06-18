@@ -91,9 +91,9 @@ ProofGate is useful for teams that want AI coding acceleration without losing ch
 - static judging dashboard;
 - proof packet sample;
 - Band integration boundary;
+- hackathon requirement checklist;
 - tests.
 
 ## What Is Not Included
 
 This public demo does not include private production workflow internals, private scoring formulas, or proprietary artifact contracts.
-

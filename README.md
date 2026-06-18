@@ -27,6 +27,8 @@ Band usage:
 - Human approval is separate from agent output.
 - The demo includes a Band SDK integration stub so the same agents can be connected to real Band external agents.
 
+See `HACKATHON_REQUIREMENTS.md` for the judging checklist and the remaining live-Band proof step.
+
 ## Why It Matters
 
 Enterprises want AI coding agents, but they cannot let autonomous agents freely mutate production code. ProofGate gives them a control room where planner, engineer, tester, and reviewer agents coordinate before a change reaches human apply.
@@ -50,6 +52,8 @@ Open the dashboard:
 ```text
 demo/index.html
 ```
+
+For a hosted submission URL, publish the `demo/` folder with GitHub Pages or another static host.
 
 No API keys are required for the local demo.
 
@@ -92,4 +96,3 @@ The adapter is deliberately isolated so credentials never enter the repository.
 ## Public Demo Boundary
 
 This repository is a hackathon demo. It does not include any private production kernel, private scoring formula, private artifact schema, or protected implementation details.
-
