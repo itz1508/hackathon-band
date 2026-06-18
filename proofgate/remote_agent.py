@@ -101,8 +101,10 @@ class ProofGateDirectAdapter:
         user_prompt = self._user_prompt(msg, history, participants_msg, contacts_msg)
         fingerprint = self._message_fingerprint(room_id, user_prompt)
         if fingerprint in self._processed_fingerprints:
+            print(f"ProofGate {self.role} skipped duplicate message in {room_id}.", flush=True)
             return
-        self._processed_fingerprints.add(fingerprint)
+        sender = getattr(msg, "sender_name", None) or getattr(msg, "sender_type", "unknown")
+        print(f"ProofGate {self.role} received message from {sender} in {room_id}.", flush=True)
         if self.llm_client is None:
             content = self._fallback_content()
         else:
@@ -120,6 +122,8 @@ class ProofGateDirectAdapter:
             except Exception as exc:
                 content = self._fallback_content()
         await tools.send_message(content, mentions=[target])
+        self._processed_fingerprints.add(fingerprint)
+        print(f"ProofGate {self.role} sent handoff to {target}.", flush=True)
 
     def _system_prompt(self, target: str) -> str:
         return (
