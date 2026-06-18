@@ -4,6 +4,8 @@ from threading import Thread
 
 from proofgate.core import run_demo
 from proofgate.band_adapter import describe_band_tool_contracts, describe_live_handoffs
+from proofgate.config_writer import build_agent_config
+from proofgate.remote_agent import ROLE_NOTES
 from proofgate.server import ProofGateRequestHandler, ThreadingHTTPServer
 
 
@@ -64,6 +66,32 @@ class ProofGateDemoTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
+
+    def test_agent_config_writer_uses_all_roles(self):
+        import os
+        from unittest.mock import patch
+
+        env = {
+            "BAND_PLANNER_AGENT_ID": "planner-id",
+            "BAND_PLANNER_API_KEY": "planner-key",
+            "BAND_ENGINEER_AGENT_ID": "engineer-id",
+            "BAND_ENGINEER_API_KEY": "engineer-key",
+            "BAND_TESTER_AGENT_ID": "tester-id",
+            "BAND_TESTER_API_KEY": "tester-key",
+            "BAND_REVIEWER_AGENT_ID": "reviewer-id",
+            "BAND_REVIEWER_API_KEY": "reviewer-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = build_agent_config()
+
+        self.assertIn("planner:", config)
+        self.assertIn('agent_id: "planner-id"', config)
+        self.assertIn("engineer:", config)
+        self.assertIn("tester:", config)
+        self.assertIn("reviewer:", config)
+
+    def test_remote_agent_roles_are_defined(self):
+        self.assertEqual(set(ROLE_NOTES), {"planner", "engineer", "tester", "reviewer"})
 
 
 if __name__ == "__main__":

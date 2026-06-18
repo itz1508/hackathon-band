@@ -26,6 +26,47 @@ BAND_REVIEWER_AGENT_ID=<reviewer agent UUID>
 
 The agent API keys also belong in `.env`. Do not commit `.env`.
 
+Band's example remote-agent setup also uses an LLM provider key. Add this locally:
+
+```text
+OPENAI_API_KEY=<your LLM provider key>
+```
+
+Generate the ignored Band SDK config:
+
+```bash
+python -m proofgate.config_writer
+```
+
+This writes `agent_config.yaml`, which follows Band's documented shape:
+
+```yaml
+planner:
+  agent_id: "<planner-agent-uuid>"
+  api_key: "<planner-agent-api-key>"
+```
+
+Keep `agent_config.yaml` local only.
+
+## Run Remote Agents
+
+Band remote agents must have a running local process connected through the SDK.
+
+Run one terminal per role:
+
+```bash
+python -m proofgate.remote_agent planner
+python -m proofgate.remote_agent engineer
+python -m proofgate.remote_agent tester
+python -m proofgate.remote_agent reviewer
+```
+
+If dependencies are missing, install the Band SDK stack first:
+
+```bash
+uv add "band-sdk[langgraph]" langchain-openai langgraph python-dotenv
+```
+
 ## Required Platform Tools
 
 Use the tools visible in the Band agent environment:

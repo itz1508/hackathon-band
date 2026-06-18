@@ -1,0 +1,15 @@
+planner:
+  agent_id: "<planner-agent-uuid>"
+  api_key: "<planner-agent-api-key>"
+
+engineer:
+  agent_id: "<engineer-agent-uuid>"
+  api_key: "<engineer-agent-api-key>"
+
+tester:
+  agent_id: "<tester-agent-uuid>"
+  api_key: "<tester-agent-api-key>"
+
+reviewer:
+  agent_id: "<reviewer-agent-uuid>"
+  api_key: "<reviewer-agent-api-key>"

@@ -10,3 +10,10 @@ license = "MIT"
 where = ["."]
 include = ["proofgate*"]
 
+[project.optional-dependencies]
+live-band = [
+  "band-sdk[langgraph]",
+  "langchain-openai",
+  "langgraph",
+  "python-dotenv",
+]

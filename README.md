@@ -71,12 +71,37 @@ No API keys are required for the local demo.
 
 For live Band setup, copy `.env.example` to `.env`, then fill the four Band agent IDs and API keys created in the Band dashboard.
 
+Install live Band dependencies:
+
+```bash
+uv add "band-sdk[langgraph]" langchain-openai langgraph python-dotenv
+```
+
+Generate the Band SDK config:
+
+```bash
+python -m proofgate.config_writer
+```
+
+Run one remote agent process per terminal:
+
+```bash
+python -m proofgate.remote_agent planner
+python -m proofgate.remote_agent engineer
+python -m proofgate.remote_agent tester
+python -m proofgate.remote_agent reviewer
+```
+
+Band's remote-agent docs require the live remote process to keep running so the platform can deliver chat-room messages to the agent.
+
 ## Repository Layout
 
 ```text
 proofgate/                 Core demo engine
 proofgate/server.py        Local backend dashboard and JSON API
 proofgate/band_adapter.py  Band SDK integration boundary
+proofgate/remote_agent.py  Band SDK remote-agent runner scaffold
+proofgate/config_writer.py Local agent_config.yaml generator
 demo/                      Static dashboard for judging/video
 docs/                      Submission notes and generated sample packets
 tests/                     Unit tests for proof packet behavior
