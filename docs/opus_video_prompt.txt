@@ -1,0 +1,30 @@
+Create a 60 to 90 second hackathon demo video for "ProofGate for Band".
+
+Tone:
+Clear, technical, investor-friendly, not flashy.
+
+Main story:
+ProofGate is not just a group of agents chatting. It is an apply gate for AI-generated code changes. Band remote agents coordinate a code-change workflow, and the final output is a proof packet for the human apply decision.
+
+Show these scenes in order:
+1. Hook: AI coding agents move fast, but teams need proof before apply.
+2. Product: ProofGate for Band, a multi-agent apply gate.
+3. Band room: show the remote agents and participant list.
+4. Success path: Human -> Intake -> Planner -> Engineer -> Tester -> Reviewer -> Human.
+5. Dashboard: show transcript, proof packet, simulated diff, validation, and Ready for human apply.
+6. Failure path concept: Reviewer -> Issue Isolator -> Reviewer -> Human with safe_to_apply false.
+7. Test terminal: Ran 18 tests, OK.
+8. Closing: ProofGate turns Band agent collaboration into an auditable human apply gate.
+
+Voiceover:
+Use the "One-Minute Voiceover" from docs/OPUS_VIDEO_PACKET.md if voice is needed.
+
+Captions:
+Use docs/opus_captions.srt.
+
+Important phrases to emphasize:
+- Band is the live coordination layer.
+- The output is not just code. It is a proof packet.
+- Humans decide apply.
+- Unsafe changes return safe_to_apply false.
+- ProofGate is model-agnostic and agent-agnostic governance for AI coding workflows.

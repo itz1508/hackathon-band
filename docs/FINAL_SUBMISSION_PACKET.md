@@ -60,15 +60,15 @@ c:\Users\itz15\OneDrive\Desktop\BAND\full screen.png
 
 Recommended recording order:
 
-1. Band chat room with all four remote agents visible.
-2. Clean handoff chain: Planner -> Engineer -> Tester -> Reviewer -> Human.
+1. Band chat room with remote agents visible.
+2. Clean handoff chain: Intake -> Planner -> Engineer -> Tester -> Reviewer -> Human.
 3. Local dashboard at `http://127.0.0.1:8787`.
-4. Test terminal showing `Ran 14 tests` and `OK`.
+4. Test terminal showing `Ran 18 tests` and `OK`.
 
 Use captions from:
 
 ```text
-docs/demo_captions.srt
+docs/opus_captions.srt
 ```
 
 ### Slide Presentation
