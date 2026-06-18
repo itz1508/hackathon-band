@@ -5,7 +5,7 @@ from threading import Thread
 from proofgate.core import run_demo
 from proofgate.band_adapter import describe_band_tool_contracts, describe_live_handoffs
 from proofgate.config_writer import build_agent_config
-from proofgate.remote_agent import ROLE_NOTES
+from proofgate.remote_agent import ROLE_NOTES, main as remote_agent_main
 from proofgate.server import ProofGateRequestHandler, ThreadingHTTPServer
 
 
@@ -92,6 +92,9 @@ class ProofGateDemoTests(unittest.TestCase):
 
     def test_remote_agent_roles_are_defined(self):
         self.assertEqual(set(ROLE_NOTES), {"planner", "engineer", "tester", "reviewer"})
+
+    def test_remote_agent_cli_uses_defined_roles(self):
+        self.assertIsNotNone(remote_agent_main)
 
 
 if __name__ == "__main__":

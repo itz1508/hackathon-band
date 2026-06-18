@@ -69,7 +69,15 @@ demo/index.html
 
 No API keys are required for the local demo.
 
-For live Band setup, copy `.env.example` to `.env`, then fill the four Band agent IDs and API keys created in the Band dashboard.
+For live Band setup, copy `.env.example` to `.env`, then fill the four Band agent IDs, Band API keys, and an OpenAI-compatible LLM provider key.
+
+The checked-in example defaults to Featherless:
+
+```text
+OPENAI_BASE_URL=https://api.featherless.ai/v1
+OPENAI_MODEL=openai/gpt-oss-20b
+FEATHERLESS_API_KEY=<local only>
+```
 
 Install live Band dependencies:
 

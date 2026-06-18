@@ -26,10 +26,12 @@ BAND_REVIEWER_AGENT_ID=<reviewer agent UUID>
 
 The agent API keys also belong in `.env`. Do not commit `.env`.
 
-Band's example remote-agent setup also uses an LLM provider key. Add this locally:
+Band's example remote-agent setup also uses an LLM provider key. For this demo, the runner supports OpenAI-compatible providers. Add this locally for Featherless:
 
 ```text
-OPENAI_API_KEY=<your LLM provider key>
+FEATHERLESS_API_KEY=<your Featherless key>
+OPENAI_BASE_URL=https://api.featherless.ai/v1
+OPENAI_MODEL=openai/gpt-oss-20b
 ```
 
 Generate the ignored Band SDK config:

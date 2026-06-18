@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 
 
 ROLE_NOTES = {
@@ -54,8 +55,20 @@ async def run_remote_agent(role: str) -> None:
 
     load_dotenv()
     agent_id, api_key = load_agent_config(role)
+    llm_api_key = os.getenv("FEATHERLESS_API_KEY") or os.getenv("OPENAI_API_KEY")
+    llm_base_url = os.getenv("OPENAI_BASE_URL", "https://api.featherless.ai/v1")
+    llm_model = os.getenv("OPENAI_MODEL", "openai/gpt-oss-20b")
+    if not llm_api_key:
+        raise SystemExit("Missing FEATHERLESS_API_KEY or OPENAI_API_KEY in .env")
+
     adapter = LangGraphAdapter(
-        llm=ChatOpenAI(model="gpt-4o-mini", temperature=0),
+        llm=ChatOpenAI(
+            model=llm_model,
+            api_key=llm_api_key,
+            base_url=llm_base_url,
+            temperature=0,
+            max_tokens=4096,
+        ),
         checkpointer=InMemorySaver(),
     )
     agent = Agent.create(adapter=adapter, agent_id=agent_id, api_key=api_key)
@@ -66,7 +79,7 @@ async def run_remote_agent(role: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one live ProofGate Band remote agent.")
-    parser.add_argument("role", choices=sorted(ROLE_SYSTEM_PROMPTS))
+    parser.add_argument("role", choices=sorted(ROLE_NOTES))
     args = parser.parse_args()
     asyncio.run(run_remote_agent(args.role))
     return 0
