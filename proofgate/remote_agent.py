@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+RECONNECT_DELAY_SECONDS = 5.0
+
 
 ROLE_NOTES = {
     "planner": (
@@ -250,11 +252,31 @@ async def run_remote_agent(role: str) -> None:
     await agent.run()
 
 
+async def run_remote_agent_forever(role: str) -> None:
+    while True:
+        try:
+            await run_remote_agent(role)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            print(f"ProofGate {role} agent disconnected: {type(exc).__name__}. Reconnecting in {RECONNECT_DELAY_SECONDS:g}s.")
+            await asyncio.sleep(RECONNECT_DELAY_SECONDS)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run one live ProofGate Band remote agent.")
+    parser.add_argument(
+        "--no-reconnect",
+        action="store_true",
+        help="Run once and exit if the Band SDK connection closes.",
+    )
     parser.add_argument("role", choices=sorted(ROLE_NOTES))
     args = parser.parse_args()
-    asyncio.run(run_remote_agent(args.role))
+    runner = run_remote_agent if args.no_reconnect else run_remote_agent_forever
+    try:
+        asyncio.run(runner(args.role))
+    except KeyboardInterrupt:
+        print(f"ProofGate {args.role} agent stopped.")
     return 0
 
 
