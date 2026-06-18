@@ -1,12 +1,51 @@
 import unittest
+from dataclasses import dataclass
 from http.client import HTTPConnection
 from threading import Thread
+from types import SimpleNamespace
 
 from proofgate.core import run_demo
 from proofgate.band_adapter import describe_band_tool_contracts, describe_live_handoffs
 from proofgate.config_writer import build_agent_config
-from proofgate.remote_agent import ROLE_NOTES, main as remote_agent_main
+from proofgate.remote_agent import (
+    ProofGateDirectAdapter,
+    ROLE_NOTES,
+    ROLE_TARGETS,
+    main as remote_agent_main,
+)
 from proofgate.server import ProofGateRequestHandler, ThreadingHTTPServer
+
+
+@dataclass(frozen=True)
+class FakeMessage:
+    content: str
+    sender_name: str = "@itz1508"
+
+    def format_for_llm(self) -> str:
+        return f"[{self.sender_name}]: {self.content}"
+
+
+class FakeCompletions:
+    def __init__(self, content, exc=None):
+        self.content = content
+        self.exc = exc
+        self.calls = []
+
+    async def create(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.exc:
+            raise self.exc
+        message = SimpleNamespace(content=self.content)
+        choice = SimpleNamespace(message=message)
+        return SimpleNamespace(choices=[choice])
+
+
+class FakeTools:
+    def __init__(self):
+        self.messages_sent = []
+
+    async def send_message(self, content, mentions=None):
+        self.messages_sent.append({"content": content, "mentions": mentions or []})
 
 
 class ProofGateDemoTests(unittest.TestCase):
@@ -92,9 +131,128 @@ class ProofGateDemoTests(unittest.TestCase):
 
     def test_remote_agent_roles_are_defined(self):
         self.assertEqual(set(ROLE_NOTES), {"planner", "engineer", "tester", "reviewer"})
+        self.assertEqual(set(ROLE_TARGETS), set(ROLE_NOTES))
 
     def test_remote_agent_cli_uses_defined_roles(self):
         self.assertIsNotNone(remote_agent_main)
+
+    def test_direct_adapter_mentions_next_role(self):
+        async def run_case():
+            completions = FakeCompletions("what_wrong: scoped issue")
+            client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+            adapter = ProofGateDirectAdapter(
+                role="planner",
+                llm_client=client,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage("Fix login whitespace."),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            self.assertEqual(tools.messages_sent[0]["mentions"], ["@itz1508/engineer"])
+            self.assertIn("Fix login whitespace.", completions.calls[0]["messages"][1]["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
+    def test_direct_adapter_handles_empty_provider_response(self):
+        async def run_case():
+            completions = FakeCompletions("")
+            client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+            adapter = ProofGateDirectAdapter(
+                role="reviewer",
+                llm_client=client,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage("Validate final packet.", sender_name="@itz1508/tester"),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            sent = tools.messages_sent[0]
+            self.assertEqual(sent["mentions"], ["@itz1508"])
+            self.assertIn("safe_to_apply: false", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
+    def test_direct_adapter_falls_back_when_provider_errors(self):
+        async def run_case():
+            completions = FakeCompletions(
+                "",
+                exc=RuntimeError("bad key rc_1234567890abcdef"),
+            )
+            client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
+            adapter = ProofGateDirectAdapter(
+                role="engineer",
+                llm_client=client,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage("Use fallback."),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            sent = tools.messages_sent[0]
+            self.assertEqual(sent["mentions"], ["@itz1508/tester"])
+            self.assertIn("provider_status: deterministic_fallback", sent["content"])
+            self.assertIn("<redacted>", sent["content"])
+            self.assertNotIn("rc_1234567890abcdef", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
+    def test_direct_adapter_can_run_without_llm_client(self):
+        async def run_case():
+            adapter = ProofGateDirectAdapter(
+                role="tester",
+                llm_client=None,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage("Validate fallback."),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            sent = tools.messages_sent[0]
+            self.assertEqual(sent["mentions"], ["@itz1508/reviewer"])
+            self.assertIn("validation_summary", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
 
 
 if __name__ == "__main__":

@@ -26,13 +26,25 @@ BAND_REVIEWER_AGENT_ID=<reviewer agent UUID>
 
 The agent API keys also belong in `.env`. Do not commit `.env`.
 
-Band's example remote-agent setup also uses an LLM provider key. For this demo, the runner supports OpenAI-compatible providers. Add this locally for Featherless:
+Band's example remote-agent setup also uses an LLM provider key. For this demo, the runner supports OpenAI-compatible providers, but the key is optional for demo continuity. If the provider is missing or rejects the request, the runner sends deterministic ProofGate handoffs instead of crashing.
+
+Add this locally for Featherless when you want model-generated handoffs:
 
 ```text
 FEATHERLESS_API_KEY=<your Featherless key>
 OPENAI_BASE_URL=https://api.featherless.ai/v1
 OPENAI_MODEL=openai/gpt-oss-20b
 ```
+
+If you use LangSmith tracing, add these separately:
+
+```text
+LANGSMITH_API_KEY=<your LangSmith key>
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_PROJECT=proofgate-band-hackathon
+```
+
+The LangSmith key is for tracing. It does not replace `FEATHERLESS_API_KEY` or another OpenAI-compatible model provider key.
 
 Generate the ignored Band SDK config:
 
@@ -66,7 +78,7 @@ python -m proofgate.remote_agent reviewer
 If dependencies are missing, install the Band SDK stack first:
 
 ```bash
-uv add "band-sdk[langgraph]" langchain-openai langgraph python-dotenv
+python -m pip install band-sdk openai python-dotenv
 ```
 
 ## Required Platform Tools

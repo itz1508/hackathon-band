@@ -12,8 +12,7 @@ include = ["proofgate*"]
 
 [project.optional-dependencies]
 live-band = [
-  "band-sdk[langgraph]",
-  "langchain-openai",
-  "langgraph",
+  "band-sdk",
+  "openai",
   "python-dotenv",
 ]

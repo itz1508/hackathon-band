@@ -69,9 +69,9 @@ demo/index.html
 
 No API keys are required for the local demo.
 
-For live Band setup, copy `.env.example` to `.env`, then fill the four Band agent IDs, Band API keys, and an OpenAI-compatible LLM provider key.
+For live Band setup, copy `.env.example` to `.env`, then fill the four Band agent IDs and Band API keys.
 
-The checked-in example defaults to Featherless:
+An OpenAI-compatible LLM provider key is optional. If the provider is missing or rejects the request, the remote agents keep the Band workflow moving with deterministic ProofGate handoffs. The checked-in example defaults to Featherless when a key is present:
 
 ```text
 OPENAI_BASE_URL=https://api.featherless.ai/v1
@@ -79,10 +79,18 @@ OPENAI_MODEL=openai/gpt-oss-20b
 FEATHERLESS_API_KEY=<local only>
 ```
 
+LangSmith tracing is optional and separate from the LLM provider key:
+
+```text
+LANGSMITH_API_KEY=<local only>
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_PROJECT=proofgate-band-hackathon
+```
+
 Install live Band dependencies:
 
 ```bash
-uv add "band-sdk[langgraph]" langchain-openai langgraph python-dotenv
+python -m pip install band-sdk openai python-dotenv
 ```
 
 Generate the Band SDK config:
@@ -108,7 +116,7 @@ Band's remote-agent docs require the live remote process to keep running so the 
 proofgate/                 Core demo engine
 proofgate/server.py        Local backend dashboard and JSON API
 proofgate/band_adapter.py  Band SDK integration boundary
-proofgate/remote_agent.py  Band SDK remote-agent runner scaffold
+proofgate/remote_agent.py  Band SDK remote-agent runner
 proofgate/config_writer.py Local agent_config.yaml generator
 demo/                      Static dashboard for judging/video
 docs/                      Submission notes and generated sample packets
