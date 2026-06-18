@@ -367,6 +367,42 @@ class ProofGateDemoTests(unittest.TestCase):
 
         asyncio.run(run_case())
 
+    def test_reviewer_blocks_after_issue_isolator_handoff(self):
+        async def run_case():
+            adapter = ProofGateDirectAdapter(
+                role="reviewer",
+                llm_client=None,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage(
+                    "what_failed: Validation failed.\n"
+                    "why_blocked: failed_check rejects_whitespace_email still passed validation.\n"
+                    "safe_to_apply: false\n"
+                    "human_action: retry_or_reject",
+                    sender_name="@itz1508/issue-isolator",
+                ),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            sent = tools.messages_sent[0]
+            self.assertEqual(sent["mentions"], ["@itz1508"])
+            self.assertIn("safe_to_apply: false", sent["content"])
+            self.assertIn("human_action: retry_or_reject", sent["content"])
+            self.assertIn("cannot approve", sent["content"])
+            self.assertNotIn("safe_to_apply: true", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
     def test_intake_returns_structured_task_for_planner(self):
         async def run_case():
             adapter = ProofGateDirectAdapter(

@@ -121,7 +121,7 @@ class ProofGateDirectAdapter:
         sender = getattr(msg, "sender_name", None) or getattr(msg, "sender_type", "unknown")
         print(f"ProofGate {self.role} received message from {sender} in {room_id}.", flush=True)
         if self.llm_client is None:
-            content = self._fallback_content()
+            content = self._fallback_content(user_prompt)
         else:
             try:
                 response = await self.llm_client.chat.completions.create(
@@ -135,7 +135,7 @@ class ProofGateDirectAdapter:
                 )
                 content = self._extract_content(response)
             except Exception as exc:
-                content = self._fallback_content()
+                content = self._fallback_content(user_prompt)
         await tools.send_message(content, mentions=[target])
         self._processed_fingerprints.add(fingerprint)
         print(f"ProofGate {self.role} sent handoff to {target}.", flush=True)
@@ -202,7 +202,7 @@ class ProofGateDirectAdapter:
             )
         return content
 
-    def _fallback_content(self) -> str:
+    def _fallback_content(self, user_prompt: str = "") -> str:
         target_label = ROLE_TARGET_LABELS[self.role]
         if self.role == "intake":
             return (
@@ -251,6 +251,17 @@ class ProofGateDirectAdapter:
                 "human_action: retry_or_reject\n"
                 f"handoff_to: {target_label}"
             )
+        if self.role == "reviewer" and _contains_blocked_signal(user_prompt):
+            return (
+                "what_wrong: The proposed change is not ready for human apply because validation or scope evidence failed.\n"
+                "why_it_matters: ProofGate must not present unsafe or unresolved agent output as apply-ready work.\n"
+                "how_to_fix: Retry with a focused patch that addresses the isolated failed check and provide updated validation evidence.\n"
+                "validation_summary: {all_tests_passed: false, scope_ok: uncertainty}\n"
+                "safe_to_apply: false\n"
+                "human_action: retry_or_reject\n"
+                "decision_reason: Issue isolation reported a blocked apply condition, so Reviewer cannot approve the change.\n"
+                f"handoff_to: {target_label}"
+            )
         return (
             "what_wrong: The original validator accepts invalid whitespace-only identity input.\n"
             "why_it_matters: Bad identity input can pass into login and account flows.\n"
@@ -262,6 +273,20 @@ class ProofGateDirectAdapter:
             "decision_reason: The simulated patch is scoped and validation passed.\n"
             f"handoff_to: {target_label}"
         )
+
+
+def _contains_blocked_signal(value: str) -> bool:
+    normalized = value.lower()
+    markers = [
+        "safe_to_apply: false",
+        "human_action: retry_or_reject",
+        "what_failed:",
+        "why_blocked:",
+        "validation failed",
+        "failed_check",
+        "still passed validation",
+    ]
+    return any(marker in normalized for marker in markers)
 
 
 async def run_remote_agent(role: str) -> None:
