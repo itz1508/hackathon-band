@@ -14,16 +14,17 @@ A multi-agent safety workflow for AI code changes using Band remote agents. Plan
 
 ProofGate for Band is a multi-agent control room for AI code changes.
 
-The project uses Band as the live coordination layer between four specialized remote agents: Planner, Engineer, Tester, and Reviewer. Instead of letting one AI coding agent jump directly from a request to an apply decision, ProofGate routes the change through a structured workflow.
+The project uses Band as the live coordination layer between specialized remote agents: Planner, Engineer, Tester, Reviewer, and an optional Issue Isolator for failed changes. Instead of letting one AI coding agent jump directly from a request to an apply decision, ProofGate routes the change through a structured workflow.
 
 Planner scopes the task and defines success criteria.
 Engineer proposes the smallest patch and simulated diff.
 Tester validates behavior and scope.
 Reviewer assembles the final proof packet and sends the human apply decision.
+Issue Isolator explains unresolved validation or scope failures and returns retry guidance when a change is blocked.
 
 The demo task fixes a login validator so whitespace-only emails are rejected. The final proof packet includes what is wrong, why it matters, how to fix it, the simulated diff, validation summary, safe_to_apply, human_action, and decision_reason.
 
-The Band room demonstrates live agent collaboration through mentions and role-based handoffs. The local dashboard presents the same workflow as a product view with transcript, proof packet, simulated diff, validation results, and "Ready for human apply."
+The Band room demonstrates live agent collaboration through mentions and role-based handoffs. The local dashboard presents the same workflow as a product view with transcript, proof packet, simulated diff, validation results, and "Ready for human apply." When validation fails, the same design can return safe_to_apply: false with isolated failure cause and retry guidance.
 
 Target users are engineering teams adopting AI coding agents in codebases where direct autonomous mutation is too risky. ProofGate can become a SaaS or API layer that records agent handoffs, simulated diffs, validation results, and human apply decisions for each AI-generated change.
 

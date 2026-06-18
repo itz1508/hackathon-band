@@ -37,6 +37,11 @@ ROLE_NOTES = {
         "You are @itz1508/reviewer for ProofGate. Review validation, assemble "
         "the proof packet, and direct-message @itz1508 with safe_to_apply."
     ),
+    "issue-isolator": (
+        "You are @itz1508/issue-isolator for ProofGate. Isolate unresolved "
+        "validation or scope failures, explain why apply is blocked, and "
+        "direct-message @itz1508/reviewer with retry guidance."
+    ),
 }
 
 ROLE_TARGETS = {
@@ -44,6 +49,7 @@ ROLE_TARGETS = {
     "engineer": "@itz1508/tester",
     "tester": "@itz1508/reviewer",
     "reviewer": "@itz1508",
+    "issue-isolator": "@itz1508/reviewer",
 }
 
 ROLE_TARGET_LABELS = {
@@ -51,6 +57,7 @@ ROLE_TARGET_LABELS = {
     "engineer": "Tester",
     "tester": "Reviewer",
     "reviewer": "Human",
+    "issue-isolator": "Reviewer",
 }
 
 
@@ -212,6 +219,17 @@ class ProofGateDirectAdapter:
                 "why_it_matters: A diff alone does not prove the requested failure mode was resolved.\n"
                 "how_to_fix: Validate whitespace rejection, normal email acceptance, and single-file scope.\n"
                 "validation_summary: {all_tests_passed: true, scope_ok: true, tests_run: [rejects_blank_email, rejects_whitespace_email, accepts_normal_email, scope_limited_to_auth_py]}\n"
+                f"handoff_to: {target_label}"
+            )
+        if self.role == "issue-isolator":
+            return (
+                "what_failed: Validation or scope evidence is not sufficient for human apply.\n"
+                "why_blocked: ProofGate cannot mark a change safe until failed checks are isolated and retry guidance is clear.\n"
+                "suspected_cause: The patch, validation summary, or scoped_files evidence does not satisfy the reviewer gate.\n"
+                "retry_instruction: Send a focused correction back to Engineer with the exact failed check and required evidence.\n"
+                "evidence_needed: updated simulated_diff, validation_summary, and scope confirmation.\n"
+                "safe_to_apply: false\n"
+                "human_action: retry_or_reject\n"
                 f"handoff_to: {target_label}"
             )
         return (

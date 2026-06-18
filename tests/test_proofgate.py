@@ -120,6 +120,8 @@ class ProofGateDemoTests(unittest.TestCase):
             "BAND_TESTER_API_KEY": "tester-key",
             "BAND_REVIEWER_AGENT_ID": "reviewer-id",
             "BAND_REVIEWER_API_KEY": "reviewer-key",
+            "BAND_ISSUE_ISOLATOR_AGENT_ID": "issue-isolator-id",
+            "BAND_ISSUE_ISOLATOR_API_KEY": "issue-isolator-key",
         }
         with patch.dict(os.environ, env, clear=True):
             config = build_agent_config()
@@ -129,9 +131,13 @@ class ProofGateDemoTests(unittest.TestCase):
         self.assertIn("engineer:", config)
         self.assertIn("tester:", config)
         self.assertIn("reviewer:", config)
+        self.assertIn("issue-isolator:", config)
 
     def test_remote_agent_roles_are_defined(self):
-        self.assertEqual(set(ROLE_NOTES), {"planner", "engineer", "tester", "reviewer"})
+        self.assertEqual(
+            set(ROLE_NOTES),
+            {"planner", "engineer", "tester", "reviewer", "issue-isolator"},
+        )
         self.assertEqual(set(ROLE_TARGETS), set(ROLE_NOTES))
         self.assertEqual(set(ROLE_TARGET_LABELS), set(ROLE_NOTES))
 
@@ -281,6 +287,35 @@ class ProofGateDemoTests(unittest.TestCase):
             self.assertEqual(sent["mentions"], ["@itz1508/reviewer"])
             self.assertIn("validation_summary", sent["content"])
             self.assertIn("handoff_to: Reviewer", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
+    def test_issue_isolator_returns_blocked_retry_guidance(self):
+        async def run_case():
+            adapter = ProofGateDirectAdapter(
+                role="issue-isolator",
+                llm_client=None,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage("Validation failed.", sender_name="@itz1508/reviewer"),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            sent = tools.messages_sent[0]
+            self.assertEqual(sent["mentions"], ["@itz1508/reviewer"])
+            self.assertIn("what_failed", sent["content"])
+            self.assertIn("safe_to_apply: false", sent["content"])
+            self.assertIn("human_action: retry_or_reject", sent["content"])
 
         import asyncio
 

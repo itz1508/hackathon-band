@@ -6,7 +6,7 @@ The local ProofGate runner already shows the product flow. The live hackathon pr
 
 ## Create Remote Agents
 
-Create four external agents in Band:
+Create four required external agents in Band, plus the optional failure-path isolator:
 
 | Agent name | Handle | Responsibility |
 |---|---|---|
@@ -14,6 +14,7 @@ Create four external agents in Band:
 | ProofGate Engineer | `@itz1508/engineer` | Produce the patch candidate and simulated diff |
 | ProofGate Tester | `@itz1508/tester` | Validate behavior, scope, and hashes |
 | ProofGate Reviewer | `@itz1508/reviewer` | Decide whether the proof packet reaches human apply |
+| ProofGate Issue Isolator | `@itz1508/issue-isolator` | Isolate unresolved validation or scope failures before retry |
 
 After creation, copy each agent UUID into local `.env`.
 
@@ -22,6 +23,7 @@ BAND_PLANNER_AGENT_ID=<planner agent UUID>
 BAND_ENGINEER_AGENT_ID=<engineer agent UUID>
 BAND_TESTER_AGENT_ID=<tester agent UUID>
 BAND_REVIEWER_AGENT_ID=<reviewer agent UUID>
+BAND_ISSUE_ISOLATOR_AGENT_ID=<issue-isolator agent UUID>
 ```
 
 The agent API keys also belong in `.env`. Do not commit `.env`.
@@ -73,6 +75,7 @@ python -m proofgate.remote_agent planner
 python -m proofgate.remote_agent engineer
 python -m proofgate.remote_agent tester
 python -m proofgate.remote_agent reviewer
+python -m proofgate.remote_agent issue-isolator
 ```
 
 If dependencies are missing, install the Band SDK stack first:
@@ -87,9 +90,9 @@ Use the tools visible in the Band agent environment:
 
 | Tool | How ProofGate uses it |
 |---|---|
-| `list_available_participants_service` | Find the four ProofGate agents before adding them to the room. Check every page until `total_pages` is covered. |
-| `add_participant_service` | Add missing Planner, Engineer, Tester, or Reviewer agents to the active chat room. |
-| `list_chat_participants_service` | Confirm Human, Planner, Engineer, Tester, and Reviewer are present. |
+| `list_available_participants_service` | Find the ProofGate agents before adding them to the room. Check every page until `total_pages` is covered. |
+| `add_participant_service` | Add missing Planner, Engineer, Tester, Reviewer, or Issue Isolator agents to the active chat room. |
+| `list_chat_participants_service` | Confirm Human, Planner, Engineer, Tester, Reviewer, and optional Issue Isolator are present. |
 | `send_direct_message_service` | Send the next structured handoff to the exact next role. |
 | `remove_participant_service` | Cleanup or replace a failed participant after the demo. |
 
@@ -110,6 +113,7 @@ Rules:
 - Engineer sends a patch candidate and diff to @itz1508/tester.
 - Tester sends validation results to @itz1508/reviewer.
 - Reviewer sends the final proof packet to the human.
+- If validation or scope fails, Reviewer can send the failure to @itz1508/issue-isolator.
 - Every handoff must use @mention routing.
 - The final proof packet must include what_wrong, why_it_matters, how_to_fix, simulated_diff, validation_summary, safe_to_apply, human_action, and decision_reason.
 ```
@@ -180,6 +184,22 @@ The proof packet must include:
 - decision_reason
 ```
 
+### Issue Isolator
+
+```text
+You are @itz1508/issue-isolator for ProofGate.
+
+When @itz1508/reviewer sends a failed validation or scope concern:
+1. identify what_failed;
+2. explain why_blocked;
+3. identify suspected_cause;
+4. write retry_instruction;
+5. list evidence_needed;
+6. send the blocked-apply explanation to @itz1508/reviewer.
+
+Do not approve the change. Your job is failure isolation and retry guidance.
+```
+
 ## Expected Live Handoff
 
 ```text
@@ -188,6 +208,14 @@ The proof packet must include:
 @itz1508/engineer -> @itz1508/tester
 @itz1508/tester -> @itz1508/reviewer
 @itz1508/reviewer -> @itz1508
+```
+
+Failure path:
+
+```text
+@itz1508/reviewer -> @itz1508/issue-isolator
+@itz1508/issue-isolator -> @itz1508/reviewer
+@itz1508/reviewer -> @itz1508 with safe_to_apply: false
 ```
 
 ## Video Proof Checklist

@@ -106,6 +106,7 @@ python -m proofgate.remote_agent planner
 python -m proofgate.remote_agent engineer
 python -m proofgate.remote_agent tester
 python -m proofgate.remote_agent reviewer
+python -m proofgate.remote_agent issue-isolator
 ```
 
 Band's remote-agent docs require the live remote process to keep running so the platform can deliver chat-room messages to the agent.
@@ -130,6 +131,7 @@ legacy-package-notes.md    Notes about generated source material retained in rep
 - An Engineer Agent proposes a tiny patch.
 - A Tester Agent simulates validation and records before/after hashes.
 - A Reviewer Agent blocks unsafe output and approves only scoped, validated changes.
+- An optional Issue Isolator Agent explains failed validation or scope evidence before retry.
 - The final packet includes:
   - what is wrong;
   - why it matters;
@@ -149,7 +151,7 @@ The hackathon demo can run fully offline, but `proofgate/band_adapter.py` mirror
 
 The adapter is deliberately isolated so credentials never enter the repository.
 
-Use `docs/REMOTE_AGENT_TEMPLATE.md` to create the live Planner, Engineer, Tester, and Reviewer agents in Band.
+Use `docs/REMOTE_AGENT_TEMPLATE.md` to create the live Planner, Engineer, Tester, Reviewer, and optional Issue Isolator agents in Band.
 
 ## Public Demo Boundary
 
