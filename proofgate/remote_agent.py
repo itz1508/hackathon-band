@@ -21,6 +21,11 @@ RECONNECT_DELAY_SECONDS = 5.0
 
 
 ROLE_NOTES = {
+    "intake": (
+        "You are @itz1508/intake for ProofGate. Receive raw human code-change "
+        "requests, identify intent, constraints, missing information, and "
+        "send a structured task to @itz1508/planner when ready."
+    ),
     "planner": (
         "You are @itz1508/planner for ProofGate. Scope the task, define "
         "scoped_files and success_criteria, then direct-message @itz1508/engineer."
@@ -45,6 +50,7 @@ ROLE_NOTES = {
 }
 
 ROLE_TARGETS = {
+    "intake": "@itz1508/planner",
     "planner": "@itz1508/engineer",
     "engineer": "@itz1508/tester",
     "tester": "@itz1508/reviewer",
@@ -53,6 +59,7 @@ ROLE_TARGETS = {
 }
 
 ROLE_TARGET_LABELS = {
+    "intake": "Planner",
     "planner": "Engineer",
     "engineer": "Tester",
     "tester": "Reviewer",
@@ -196,6 +203,17 @@ class ProofGateDirectAdapter:
 
     def _fallback_content(self) -> str:
         target_label = ROLE_TARGET_LABELS[self.role]
+        if self.role == "intake":
+            return (
+                "user_request: Fix a login validator so whitespace-only emails are rejected.\n"
+                "target_behavior: Reject blank or whitespace-only email values while preserving valid email acceptance.\n"
+                "suspected_area: demo_repo/auth.py\n"
+                "constraints: Keep the patch scoped to the validator behavior and do not claim real mutation.\n"
+                "risk_level: medium\n"
+                "missing_information: none\n"
+                "ready_for_planning: true\n"
+                f"handoff_to: {target_label}"
+            )
         if self.role == "planner":
             return (
                 "what_wrong: The login validator accepts whitespace-only input because the request has not been scoped into a bounded patch yet.\n"

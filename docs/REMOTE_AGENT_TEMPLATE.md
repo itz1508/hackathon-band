@@ -6,10 +6,11 @@ The local ProofGate runner already shows the product flow. The live hackathon pr
 
 ## Create Remote Agents
 
-Create four required external agents in Band, plus the optional failure-path isolator:
+Create the required external agents in Band, plus the optional failure-path isolator:
 
 | Agent name | Handle | Responsibility |
 |---|---|---|
+| ProofGate Intake | `@itz1508/intake` | Convert raw human requests into structured ProofGate tasks |
 | ProofGate Planner | `@itz1508/planner` | Scope the user request and define success criteria |
 | ProofGate Engineer | `@itz1508/engineer` | Produce the patch candidate and simulated diff |
 | ProofGate Tester | `@itz1508/tester` | Validate behavior, scope, and hashes |
@@ -19,6 +20,7 @@ Create four required external agents in Band, plus the optional failure-path iso
 After creation, copy each agent UUID into local `.env`.
 
 ```text
+BAND_INTAKE_AGENT_ID=<intake agent UUID>
 BAND_PLANNER_AGENT_ID=<planner agent UUID>
 BAND_ENGINEER_AGENT_ID=<engineer agent UUID>
 BAND_TESTER_AGENT_ID=<tester agent UUID>
@@ -71,6 +73,7 @@ Band remote agents must have a running local process connected through the SDK.
 Run one terminal per role:
 
 ```bash
+python -m proofgate.remote_agent intake
 python -m proofgate.remote_agent planner
 python -m proofgate.remote_agent engineer
 python -m proofgate.remote_agent tester
@@ -109,6 +112,7 @@ Goal:
 Fix a login validator so whitespace-only emails are rejected.
 
 Rules:
+- Intake converts the raw human request into a structured task for @itz1508/planner.
 - Planner scopes the request and sends structured scope to @itz1508/engineer.
 - Engineer sends a patch candidate and diff to @itz1508/tester.
 - Tester sends validation results to @itz1508/reviewer.
@@ -119,6 +123,24 @@ Rules:
 ```
 
 ## Role Prompts
+
+### Intake
+
+```text
+You are @itz1508/intake for ProofGate.
+
+When the human sends a raw code-change request:
+1. identify user_request;
+2. identify target_behavior;
+3. identify suspected_area;
+4. list constraints;
+5. set risk_level;
+6. identify missing_information;
+7. set ready_for_planning;
+8. send the structured task to @itz1508/planner.
+
+Do not produce code. Do not approve the change. Your job is intake and task shaping.
+```
 
 ### Planner
 
@@ -203,7 +225,8 @@ Do not approve the change. Your job is failure isolation and retry guidance.
 ## Expected Live Handoff
 
 ```text
-@itz1508 -> @itz1508/planner
+@itz1508 -> @itz1508/intake
+@itz1508/intake -> @itz1508/planner
 @itz1508/planner -> @itz1508/engineer
 @itz1508/engineer -> @itz1508/tester
 @itz1508/tester -> @itz1508/reviewer

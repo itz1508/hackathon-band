@@ -6,6 +6,7 @@ ProofGate turns a risky AI code-change request into a shared Band coordination f
 
 ```text
 Human request
+-> @itz1508/intake structures the request
 -> @itz1508/planner scopes the change
 -> @itz1508/engineer proposes a patch
 -> @itz1508/tester simulates validation
@@ -31,7 +32,7 @@ See `HACKATHON_REQUIREMENTS.md` for the judging checklist and the remaining live
 
 ## Why It Matters
 
-Enterprises want AI coding agents, but they cannot let autonomous agents freely mutate production code. ProofGate gives them a control room where planner, engineer, tester, and reviewer agents coordinate before a change reaches human apply.
+Enterprises want AI coding agents, but they cannot let autonomous agents freely mutate production code. ProofGate gives them a control room where intake, planner, engineer, tester, and reviewer agents coordinate before a change reaches human apply.
 
 ## Demo Commands
 
@@ -102,6 +103,7 @@ python -m proofgate.config_writer
 Run one remote agent process per terminal:
 
 ```bash
+python -m proofgate.remote_agent intake
 python -m proofgate.remote_agent planner
 python -m proofgate.remote_agent engineer
 python -m proofgate.remote_agent tester
@@ -127,6 +129,7 @@ legacy-package-notes.md    Notes about generated source material retained in rep
 
 ## What The Demo Shows
 
+- An optional Intake Agent converts raw human intent into a structured task.
 - A Planner Agent creates scope and success criteria.
 - An Engineer Agent proposes a tiny patch.
 - A Tester Agent simulates validation and records before/after hashes.
@@ -151,7 +154,7 @@ The hackathon demo can run fully offline, but `proofgate/band_adapter.py` mirror
 
 The adapter is deliberately isolated so credentials never enter the repository.
 
-Use `docs/REMOTE_AGENT_TEMPLATE.md` to create the live Planner, Engineer, Tester, Reviewer, and optional Issue Isolator agents in Band.
+Use `docs/REMOTE_AGENT_TEMPLATE.md` to create the live Intake, Planner, Engineer, Tester, Reviewer, and optional Issue Isolator agents in Band.
 
 ## Public Demo Boundary
 

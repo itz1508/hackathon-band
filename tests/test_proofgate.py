@@ -112,6 +112,8 @@ class ProofGateDemoTests(unittest.TestCase):
         from unittest.mock import patch
 
         env = {
+            "BAND_INTAKE_AGENT_ID": "intake-id",
+            "BAND_INTAKE_API_KEY": "intake-key",
             "BAND_PLANNER_AGENT_ID": "planner-id",
             "BAND_PLANNER_API_KEY": "planner-key",
             "BAND_ENGINEER_AGENT_ID": "engineer-id",
@@ -127,6 +129,7 @@ class ProofGateDemoTests(unittest.TestCase):
             config = build_agent_config()
 
         self.assertIn("planner:", config)
+        self.assertIn("intake:", config)
         self.assertIn('agent_id: "planner-id"', config)
         self.assertIn("engineer:", config)
         self.assertIn("tester:", config)
@@ -136,7 +139,7 @@ class ProofGateDemoTests(unittest.TestCase):
     def test_remote_agent_roles_are_defined(self):
         self.assertEqual(
             set(ROLE_NOTES),
-            {"planner", "engineer", "tester", "reviewer", "issue-isolator"},
+            {"intake", "planner", "engineer", "tester", "reviewer", "issue-isolator"},
         )
         self.assertEqual(set(ROLE_TARGETS), set(ROLE_NOTES))
         self.assertEqual(set(ROLE_TARGET_LABELS), set(ROLE_NOTES))
@@ -316,6 +319,34 @@ class ProofGateDemoTests(unittest.TestCase):
             self.assertIn("what_failed", sent["content"])
             self.assertIn("safe_to_apply: false", sent["content"])
             self.assertIn("human_action: retry_or_reject", sent["content"])
+
+        import asyncio
+
+        asyncio.run(run_case())
+
+    def test_intake_returns_structured_task_for_planner(self):
+        async def run_case():
+            adapter = ProofGateDirectAdapter(
+                role="intake",
+                llm_client=None,
+                model="openai/gpt-oss-20b",
+            )
+            tools = FakeTools()
+
+            await adapter.on_message(
+                msg=FakeMessage("Fix login whitespace."),
+                tools=tools,
+                history=SimpleNamespace(raw=[]),
+                participants_msg=None,
+                contacts_msg=None,
+                is_session_bootstrap=False,
+                room_id="room-1",
+            )
+
+            sent = tools.messages_sent[0]
+            self.assertEqual(sent["mentions"], ["@itz1508/planner"])
+            self.assertIn("ready_for_planning: true", sent["content"])
+            self.assertIn("handoff_to: Planner", sent["content"])
 
         import asyncio
 

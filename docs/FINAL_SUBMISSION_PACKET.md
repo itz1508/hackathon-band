@@ -8,14 +8,15 @@ ProofGate for Band
 
 ### Short Description
 
-A multi-agent safety workflow for AI code changes using Band remote agents. Planner, Engineer, Tester, and Reviewer coordinate scope, patch, validation, and final human apply approval.
+A multi-agent safety workflow for AI code changes using Band remote agents. Intake, Planner, Engineer, Tester, and Reviewer coordinate request shaping, scope, patch, validation, and final human apply approval.
 
 ### Long Description
 
 ProofGate for Band is a multi-agent control room for AI code changes.
 
-The project uses Band as the live coordination layer between specialized remote agents: Planner, Engineer, Tester, Reviewer, and an optional Issue Isolator for failed changes. Instead of letting one AI coding agent jump directly from a request to an apply decision, ProofGate routes the change through a structured workflow.
+The project uses Band as the live coordination layer between specialized remote agents: Intake, Planner, Engineer, Tester, Reviewer, and an optional Issue Isolator for failed changes. Instead of letting one AI coding agent jump directly from a request to an apply decision, ProofGate routes the change through a structured workflow.
 
+Intake converts raw human intent into a structured task.
 Planner scopes the task and defines success criteria.
 Engineer proposes the smallest patch and simulated diff.
 Tester validates behavior and scope.

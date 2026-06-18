@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 ROLE_ENV = {
+    "intake": ("BAND_INTAKE_AGENT_ID", "BAND_INTAKE_API_KEY"),
     "planner": ("BAND_PLANNER_AGENT_ID", "BAND_PLANNER_API_KEY"),
     "engineer": ("BAND_ENGINEER_AGENT_ID", "BAND_ENGINEER_API_KEY"),
     "tester": ("BAND_TESTER_AGENT_ID", "BAND_TESTER_API_KEY"),
