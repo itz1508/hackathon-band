@@ -6,12 +6,15 @@ import os
 from pathlib import Path
 
 
-ROLE_ENV = {
-    "intake": ("BAND_INTAKE_AGENT_ID", "BAND_INTAKE_API_KEY"),
+REQUIRED_ROLE_ENV = {
     "planner": ("BAND_PLANNER_AGENT_ID", "BAND_PLANNER_API_KEY"),
     "engineer": ("BAND_ENGINEER_AGENT_ID", "BAND_ENGINEER_API_KEY"),
     "tester": ("BAND_TESTER_AGENT_ID", "BAND_TESTER_API_KEY"),
     "reviewer": ("BAND_REVIEWER_AGENT_ID", "BAND_REVIEWER_API_KEY"),
+}
+
+OPTIONAL_ROLE_ENV = {
+    "intake": ("BAND_INTAKE_AGENT_ID", "BAND_INTAKE_API_KEY"),
     "issue-isolator": ("BAND_ISSUE_ISOLATOR_AGENT_ID", "BAND_ISSUE_ISOLATOR_API_KEY"),
 }
 
@@ -30,24 +33,39 @@ def load_dotenv(path: Path) -> None:
 def build_agent_config() -> str:
     missing: list[str] = []
     lines: list[str] = []
-    for role, (agent_id_env, api_key_env) in ROLE_ENV.items():
+    for role, (agent_id_env, api_key_env) in REQUIRED_ROLE_ENV.items():
         agent_id = os.environ.get(agent_id_env, "")
         api_key = os.environ.get(api_key_env, "")
         if not agent_id:
             missing.append(agent_id_env)
         if not api_key:
             missing.append(api_key_env)
-        lines.extend([
-            f"{role}:",
-            f"  agent_id: \"{agent_id}\"",
-            f"  api_key: \"{api_key}\"",
-            "",
-        ])
+        _append_role_config(lines, role, agent_id, api_key)
+
+    for role, (agent_id_env, api_key_env) in OPTIONAL_ROLE_ENV.items():
+        agent_id = os.environ.get(agent_id_env, "")
+        api_key = os.environ.get(api_key_env, "")
+        if not agent_id and not api_key:
+            continue
+        if not agent_id:
+            missing.append(agent_id_env)
+        if not api_key:
+            missing.append(api_key_env)
+        _append_role_config(lines, role, agent_id, api_key)
 
     if missing:
         joined = ", ".join(missing)
         raise ValueError(f"Missing required environment values: {joined}")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _append_role_config(lines: list[str], role: str, agent_id: str, api_key: str) -> None:
+    lines.extend([
+        f"{role}:",
+        f"  agent_id: \"{agent_id}\"",
+        f"  api_key: \"{api_key}\"",
+        "",
+    ])
 
 
 def main() -> int:

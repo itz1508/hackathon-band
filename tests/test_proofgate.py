@@ -136,6 +136,49 @@ class ProofGateDemoTests(unittest.TestCase):
         self.assertIn("reviewer:", config)
         self.assertIn("issue-isolator:", config)
 
+    def test_agent_config_writer_skips_absent_optional_roles(self):
+        import os
+        from unittest.mock import patch
+
+        env = {
+            "BAND_PLANNER_AGENT_ID": "planner-id",
+            "BAND_PLANNER_API_KEY": "planner-key",
+            "BAND_ENGINEER_AGENT_ID": "engineer-id",
+            "BAND_ENGINEER_API_KEY": "engineer-key",
+            "BAND_TESTER_AGENT_ID": "tester-id",
+            "BAND_TESTER_API_KEY": "tester-key",
+            "BAND_REVIEWER_AGENT_ID": "reviewer-id",
+            "BAND_REVIEWER_API_KEY": "reviewer-key",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            config = build_agent_config()
+
+        self.assertIn("planner:", config)
+        self.assertIn("engineer:", config)
+        self.assertIn("tester:", config)
+        self.assertIn("reviewer:", config)
+        self.assertNotIn("intake:", config)
+        self.assertNotIn("issue-isolator:", config)
+
+    def test_agent_config_writer_rejects_partial_optional_role(self):
+        import os
+        from unittest.mock import patch
+
+        env = {
+            "BAND_PLANNER_AGENT_ID": "planner-id",
+            "BAND_PLANNER_API_KEY": "planner-key",
+            "BAND_ENGINEER_AGENT_ID": "engineer-id",
+            "BAND_ENGINEER_API_KEY": "engineer-key",
+            "BAND_TESTER_AGENT_ID": "tester-id",
+            "BAND_TESTER_API_KEY": "tester-key",
+            "BAND_REVIEWER_AGENT_ID": "reviewer-id",
+            "BAND_REVIEWER_API_KEY": "reviewer-key",
+            "BAND_ISSUE_ISOLATOR_AGENT_ID": "issue-isolator-id",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            with self.assertRaisesRegex(ValueError, "BAND_ISSUE_ISOLATOR_API_KEY"):
+                build_agent_config()
+
     def test_remote_agent_roles_are_defined(self):
         self.assertEqual(
             set(ROLE_NOTES),
