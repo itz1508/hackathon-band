@@ -14,6 +14,7 @@ import argparse
 import asyncio
 import hashlib
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -301,11 +302,20 @@ async def run_remote_agent_forever(role: str) -> None:
         except asyncio.CancelledError:
             return
         except Exception as exc:
-            print(f"ProofGate {role} agent disconnected: {type(exc).__name__}. Reconnecting in {RECONNECT_DELAY_SECONDS:g}s.")
+            print(f"ProofGate {role} agent disconnected: {_safe_error_summary(exc)}. Reconnecting in {RECONNECT_DELAY_SECONDS:g}s.")
             try:
                 await asyncio.sleep(RECONNECT_DELAY_SECONDS)
             except (KeyboardInterrupt, asyncio.CancelledError):
                 return
+
+
+def _safe_error_summary(exc: Exception) -> str:
+    reason = " ".join(str(exc).split())
+    if reason:
+        reason = re.sub(r"band_[au]_[A-Za-z0-9_-]+", "<redacted>", reason)
+        reason = re.sub(r"rc_[A-Za-z0-9_-]+", "<redacted>", reason)
+        return f"{type(exc).__name__}: {reason}"
+    return type(exc).__name__
 
 
 def main() -> int:
@@ -322,6 +332,9 @@ def main() -> int:
         asyncio.run(runner(args.role))
     except (KeyboardInterrupt, asyncio.CancelledError):
         print(f"ProofGate {args.role} agent stopped.")
+    except Exception as exc:
+        print(f"ProofGate {args.role} agent failed: {_safe_error_summary(exc)}")
+        return 1
     return 0
 
 
