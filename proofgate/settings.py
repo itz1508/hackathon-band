@@ -77,6 +77,14 @@ def band_human_api_key() -> str:
     return _env("BAND_HUMAN_API_KEY")
 
 
+def band_intake_api_key() -> str:
+    return _env("BAND_INTAKE_API_KEY")
+
+
+def band_sender_handle() -> str:
+    return _env("BAND_SENDER_HANDLE", "itz1508/human")
+
+
 def band_room_id() -> str:
     return _env("BAND_ROOM_ID")
 

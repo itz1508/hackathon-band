@@ -1,0 +1,43 @@
+{
+  "label": "Success Workflow",
+  "request_text": "Review the direct Band workflow and deliver a complete final resolved result without modifying files.",
+  "constraints": [],
+  "expected_workflow_path": ["intake", "planner", "resolution", "finalizing"],
+  "expected_outcome": "completed",
+  "demo_run": {
+    "run_id": "demo-success-001",
+    "objective": "Review the direct Band workflow and deliver a complete final resolved result without modifying files.",
+    "constraints": [],
+    "outcome": "completed",
+    "retry_count": 0,
+    "workflow_path": ["intake", "planner", "resolution", "finalizing"],
+    "stage_results": {
+      "intake": {"role_success": true, "output": {"summary": "Structured request created"}},
+      "planner": {"role_success": true, "output": {"summary": "Success criteria defined"}},
+      "resolution": {"role_success": true, "output": {"summary": "Requirements met"}},
+      "finalizing": {"role_success": true, "output": {"final_summary": "Final result delivered"}}
+    },
+    "conversation_events": [
+      {"event": "new_request", "sender_role": "human", "recipient_role": "intake", "summary": "Human request submitted"},
+      {"event": "intake_complete", "sender_role": "intake", "recipient_role": "planner", "summary": "Structured request created"},
+      {"event": "plan_complete", "sender_role": "planner", "recipient_role": "resolution", "summary": "Success criteria defined"},
+      {"event": "requirements_met", "sender_role": "resolution", "recipient_role": "finalizing", "summary": "Requirements met"},
+      {"event": "terminal_result", "sender_role": "finalizing", "recipient_role": "human", "summary": "Final result delivered"}
+    ],
+    "final_result": {
+      "outcome": "completed",
+      "final_summary": "All requirements satisfied. Result delivered.",
+      "requirements_met": true,
+      "resolution": "No issues found during review.",
+      "unresolved_items": [],
+      "remaining_uncertainty": [],
+      "role_successes": {
+        "intake": "Request bounded and constraints preserved",
+        "planner": "Measurable requirements defined",
+        "resolution": "Proposed solution satisfies all criteria",
+        "finalizing": "Terminal result with full evidence"
+      }
+    },
+    "terminal": true
+  }
+}

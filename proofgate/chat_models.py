@@ -23,6 +23,7 @@ class ChatStatusResponse(BaseModel):
 
 class ChatSendRequest(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+    constraints: list[str] = []
     client_request_id: str | None = None
 
 

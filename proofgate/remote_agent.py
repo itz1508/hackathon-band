@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import re
 import os
 import re
 from pathlib import Path
@@ -16,6 +17,12 @@ from .mirror import BandMirror
 from .workflow import ROLES, advance, new_packet, stage_result, validate_packet, validate_stage_result
 
 RECONNECT_DELAY_SECONDS = 5.0
+
+
+def _strip_target_prefix(content: str) -> str:
+    """Remove one visible Band mention before parsing a structured packet."""
+    mention = r"(?:@\[\[[0-9A-Fa-f-]+\]\]|@[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)"
+    return re.sub(rf"^{mention}\s+", "", content, count=1).strip()
 
 
 class ProofGateDirectAdapter:
@@ -43,13 +50,18 @@ class ProofGateDirectAdapter:
         raw = getattr(msg, "content", msg)
         if not isinstance(raw, str):
             raw = str(raw)
+        raw = _strip_target_prefix(raw)
         try:
             packet = json.loads(raw)
         except json.JSONDecodeError:
             if self.role != "intake":
                 return  # Silently skip non-JSON messages (human text, etc.)
+            constraints = []
+            if "[constraint:force_failure]" in raw:
+                constraints.append("force_failure")
+                raw = raw.replace("[constraint:force_failure]", "").strip()
             packet = new_packet(run_id=str(uuid4()), task_id=str(uuid4()), room_id=room_id,
-                                objective=raw, constraints=[])
+                                objective=raw, constraints=constraints)
         # Skip packets not addressed to this role
         if packet.get("to_role") != self.role and self.role != "intake":
             return
@@ -67,13 +79,14 @@ class ProofGateDirectAdapter:
         self.mirror.record_event(event_key=f"{outgoing_key}:outgoing", packet=updated,
                                  event_type="outgoing", delivery_state="pending", content=outgoing)
         target = ROLE_BY_KEY[updated["to_role"]].handle if updated["to_role"] in ROLE_BY_KEY else "@itz1508"
+        wire_content = f"{target} {outgoing}"
         try:
-            await tools.send_message(outgoing, mentions=[target])
+            await tools.send_message(wire_content, mentions=[target])
         except ValueError as ve:
             # Mention failed — target may not be in room. Try adding them first.
             try:
                 await tools.add_participant(target)
-                await tools.send_message(outgoing, mentions=[target])
+                await tools.send_message(wire_content, mentions=[target])
             except Exception:
                 self.mirror.record_event(event_key=f"{outgoing_key}:failed", packet=updated,
                                          event_type="delivery", delivery_state="failed", content=outgoing)

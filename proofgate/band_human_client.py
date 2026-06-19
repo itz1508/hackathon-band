@@ -1,85 +1,97 @@
-"""Band Human API client for sending messages and reading room state.
+"""Band remote-agent sender client for UI ingress and room inspection.
 
 This is a transport adapter only. No workflow routing logic.
 
-Base URL is expected as: https://app.band.ai/api/v1
-Human API paths are: /me/chats/{id}/messages, /me/profile, etc.
+The dashboard uses a dedicated remote-agent key and Band's Agent API surface.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+from band.client.rest import (
+    AsyncRestClient,
+    ChatMessageRequest,
+    ChatMessageRequestMentionsItem,
+    DEFAULT_REQUEST_OPTIONS,
+    ParticipantRequest,
+)
 
-DEFAULT_BASE_URL = "https://app.band.ai/api/v1"
+DEFAULT_BASE_URL = "https://app.band.ai"
 
 
 class BandHumanAPIError(RuntimeError):
-    """Raised when the Band Human API returns an error."""
+    """Compatibility error for the dashboard Band sender transport."""
 
     def __init__(self, status: int, detail: str) -> None:
-        super().__init__(f"Band Human API {status}: {detail}")
+        super().__init__(f"Band sender API {status}: {detail}")
         self.status = status
         self.detail = detail
 
 
 @dataclass
 class BandHumanClient:
-    """Thin HTTP client for Band Human API. No workflow logic."""
+    """Thin Agent API client used by the local UI sender. No workflow logic."""
 
     api_key: str
     base_url: str = DEFAULT_BASE_URL
 
-    def _headers(self) -> dict[str, str]:
-        return {
-            "X-API-Key": self.api_key,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
+    def _client(self) -> AsyncRestClient:
+        return AsyncRestClient(
+            api_key=self.api_key,
+            base_url=self.base_url.removesuffix("/api/v1"),
+        )
 
-    def _url(self, path: str) -> str:
-        """Build full URL. Path should start with /me/..."""
-        return f"{self.base_url}{path}"
+    @staticmethod
+    def _dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if hasattr(value, "model_dump"):
+            return value.model_dump()
+        return {}
 
     async def health(self) -> dict[str, Any]:
-        """Check connectivity and authentication via /me/profile."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(self._url("/me/profile"), headers=self._headers())
-            if resp.status_code == 200:
-                return {"connected": True, "authenticated": True}
-            if resp.status_code in (401, 403):
-                return {"connected": True, "authenticated": False, "status": resp.status_code}
-            return {"connected": False, "authenticated": False, "status": resp.status_code}
+        """Check remote-agent authentication without exposing identity data."""
+        try:
+            await self._client().agent_api_identity.get_agent_me(
+                request_options=DEFAULT_REQUEST_OPTIONS
+            )
+            return {"connected": True, "authenticated": True}
+        except Exception as exc:
+            status = int(getattr(exc, "status_code", 0) or 0)
+            return {"connected": bool(status), "authenticated": False, "status": status}
 
     async def get_room(self, room_id: str) -> dict[str, Any]:
-        """Get room details."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(self._url(f"/me/chats/{room_id}"), headers=self._headers())
-            if resp.status_code != 200:
-                raise BandHumanAPIError(resp.status_code, resp.text)
-            return resp.json()
+        """Get a room visible to the sender agent."""
+        try:
+            response = await self._client().agent_api_chats.get_agent_chat(
+                room_id, request_options=DEFAULT_REQUEST_OPTIONS
+            )
+            return self._dict(response.data)
+        except Exception as exc:
+            raise BandHumanAPIError(
+                int(getattr(exc, "status_code", 0) or 0), "room lookup failed"
+            ) from exc
 
     async def list_participants(self, room_id: str) -> list[dict[str, Any]]:
-        """List participants in a room."""
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                self._url(f"/me/chats/{room_id}/participants"),
-                headers=self._headers(),
+        """List participants visible to the sender agent."""
+        try:
+            response = await self._client().agent_api_participants.list_agent_chat_participants(
+                room_id, request_options=DEFAULT_REQUEST_OPTIONS
             )
-            if resp.status_code != 200:
-                raise BandHumanAPIError(resp.status_code, resp.text)
-            data = resp.json()
-            if isinstance(data, list):
-                return data
-            return data.get("participants", data.get("data", []))
+            return [self._dict(item) for item in (response.data or [])]
+        except Exception as exc:
+            raise BandHumanAPIError(
+                int(getattr(exc, "status_code", 0) or 0), "participant lookup failed"
+            ) from exc
 
     async def resolve_participant(self, room_id: str, handle: str) -> dict[str, Any] | None:
         """Find a participant by handle in the room (fallback only)."""
         participants = await self.list_participants(room_id)
+        expected = handle.lower().lstrip("@")
         for p in participants:
-            p_handle = p.get("handle", "") or ""
-            if p_handle == handle or p_handle.endswith(f"/{handle}"):
+            p_handle = str(p.get("handle", "") or "").lower().lstrip("@")
+            if p_handle == expected:
                 return p
         return None
 
@@ -105,21 +117,21 @@ class BandHumanClient:
         - The @mention in the content string
         - The mentions array with participant UUID
         """
-        payload = {
-            "message": {
-                "content": content,
-                "mentions": mentions,
-            }
-        }
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                self._url(f"/me/chats/{room_id}/messages"),
-                headers=self._headers(),
-                json=payload,
+        mention_items = [
+            ChatMessageRequestMentionsItem(id=item["id"], handle=item["handle"])
+            for item in mentions
+        ]
+        try:
+            response = await self._client().agent_api_messages.create_agent_chat_message(
+                chat_id=room_id,
+                message=ChatMessageRequest(content=content, mentions=mention_items),
+                request_options=DEFAULT_REQUEST_OPTIONS,
             )
-            if resp.status_code not in (200, 201):
-                raise BandHumanAPIError(resp.status_code, resp.text)
-            return resp.json()
+            return self._dict(response.data)
+        except Exception as exc:
+            raise BandHumanAPIError(
+                int(getattr(exc, "status_code", 0) or 0), "message delivery failed"
+            ) from exc
 
     async def get_messages(
         self,
@@ -127,19 +139,90 @@ class BandHumanClient:
         after: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
-        """Read messages from a room. Human sees all messages (not mention-filtered)."""
-        params: dict[str, Any] = {"limit": limit}
-        if after:
-            params["after"] = after
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                self._url(f"/me/chats/{room_id}/messages"),
-                headers=self._headers(),
-                params=params,
+        """Unused compatibility surface; mirrored events are the read path."""
+        raise NotImplementedError("Use BandMirror for dashboard event reads")
+
+    async def ensure_room_membership(
+        self, room_id: str, member_handle: str, sponsor_api_key: str
+    ) -> bool:
+        """Use an existing room member to add the UI sender by handle."""
+        sponsor = AsyncRestClient(
+            api_key=sponsor_api_key,
+            base_url=self.base_url.removesuffix("/api/v1"),
+        )
+        normalized = member_handle.lower().lstrip("@")
+        try:
+            current = await sponsor.agent_api_participants.list_agent_chat_participants(
+                room_id, request_options=DEFAULT_REQUEST_OPTIONS
             )
-            if resp.status_code != 200:
-                raise BandHumanAPIError(resp.status_code, resp.text)
-            data = resp.json()
-            if isinstance(data, list):
-                return data
-            return data.get("messages", data.get("data", []))
+            for participant in current.data or []:
+                data = self._dict(participant)
+                if str(data.get("handle", "")).lower().lstrip("@") == normalized:
+                    return True
+
+            page = 1
+            while True:
+                peers = await sponsor.agent_api_peers.list_agent_peers(
+                    not_in_chat=room_id,
+                    page=page,
+                    page_size=100,
+                    request_options=DEFAULT_REQUEST_OPTIONS,
+                )
+                values = peers.data or []
+                for peer in values:
+                    data = self._dict(peer)
+                    if str(data.get("handle", "")).lower().lstrip("@") != normalized:
+                        continue
+                    participant_id = data.get("id")
+                    if not participant_id:
+                        return False
+                    await sponsor.agent_api_participants.add_agent_chat_participant(
+                        room_id,
+                        participant=ParticipantRequest(
+                            participant_id=str(participant_id), role="member"
+                        ),
+                        request_options=DEFAULT_REQUEST_OPTIONS,
+                    )
+                    return True
+                if len(values) < 100:
+                    return False
+                page += 1
+        except Exception:
+            return False
+
+    async def discover_workflow_room(
+        self, sponsor_api_key: str, required_handles: set[str], sender_handle: str
+    ) -> str | None:
+        """Find the best sponsor-visible room for the canonical workflow."""
+        sponsor = AsyncRestClient(
+            api_key=sponsor_api_key,
+            base_url=self.base_url.removesuffix("/api/v1"),
+        )
+        required = {value.lower().lstrip("@") for value in required_handles}
+        sender = sender_handle.lower().lstrip("@")
+        candidates: list[tuple[int, str]] = []
+        try:
+            rooms = await sponsor.agent_api_chats.list_agent_chats(
+                page=1, page_size=100, request_options=DEFAULT_REQUEST_OPTIONS
+            )
+            for room in rooms.data or []:
+                room_data = self._dict(room)
+                room_id = room_data.get("id")
+                if not room_id:
+                    continue
+                participants = await sponsor.agent_api_participants.list_agent_chat_participants(
+                    str(room_id), request_options=DEFAULT_REQUEST_OPTIONS
+                )
+                handles = {
+                    str(self._dict(item).get("handle", "")).lower().lstrip("@")
+                    for item in (participants.data or [])
+                }
+                matched = len(required & handles)
+                if matched == len(required):
+                    candidates.append((matched + (1 if sender in handles else 0), str(room_id)))
+            if not candidates:
+                return None
+            candidates.sort(reverse=True)
+            return candidates[0][1]
+        except Exception:
+            return None

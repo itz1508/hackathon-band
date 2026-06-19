@@ -1,0 +1,48 @@
+{
+  "label": "Failure and Recovery Workflow",
+  "request_text": "Process this controlled failure case, isolate the first Resolution failure, retry once, and deliver the recovered final result.",
+  "constraints": ["force_failure"],
+  "expected_workflow_path": ["intake", "planner", "resolution", "issue-isolator", "resolution-retry", "finalizing"],
+  "expected_outcome": "resolved_after_isolation",
+  "demo_run": {
+    "run_id": "demo-failure-001",
+    "objective": "Process this controlled failure case, isolate the first Resolution failure, retry once, and deliver the recovered final result.",
+    "constraints": ["force_failure"],
+    "outcome": "resolved_after_isolation",
+    "retry_count": 1,
+    "workflow_path": ["intake", "planner", "resolution", "issue-isolator", "resolution-retry", "finalizing"],
+    "stage_results": {
+      "intake": {"role_success": true, "output": {"summary": "Structured request created"}},
+      "planner": {"role_success": true, "output": {"summary": "Success criteria defined"}},
+      "resolution": {"role_success": false, "output": {"summary": "One requirement not met"}, "unmet_requirements": ["timeout handling"]},
+      "issue-isolator": {"role_success": true, "output": {"summary": "Failure isolated and retry handoff created"}},
+      "resolution-retry": {"role_success": true, "output": {"summary": "Focused correction passed validation"}},
+      "finalizing": {"role_success": true, "output": {"final_summary": "Resolved result delivered after isolation"}}
+    },
+    "conversation_events": [
+      {"event": "new_request", "sender_role": "human", "recipient_role": "intake", "summary": "Human request submitted"},
+      {"event": "intake_complete", "sender_role": "intake", "recipient_role": "planner", "summary": "Structured request created"},
+      {"event": "plan_complete", "sender_role": "planner", "recipient_role": "resolution", "summary": "Success criteria defined"},
+      {"event": "requirements_not_met", "sender_role": "resolution", "recipient_role": "issue-isolator", "summary": "One or more requirements were not met"},
+      {"event": "focused_retry", "sender_role": "issue-isolator", "recipient_role": "resolution-retry", "summary": "Failure isolated and retry handoff created"},
+      {"event": "terminal_result", "sender_role": "finalizing", "recipient_role": "human", "summary": "Resolved result delivered"}
+    ],
+    "final_result": {
+      "outcome": "resolved_after_isolation",
+      "final_summary": "Issue isolated and resolved after one retry. All requirements now satisfied.",
+      "requirements_met": true,
+      "resolution": "Timeout handling corrected in auth.py",
+      "unresolved_items": [],
+      "remaining_uncertainty": [],
+      "role_successes": {
+        "intake": "Request bounded and constraints preserved",
+        "planner": "Measurable requirements defined",
+        "resolution": "Initial attempt failed on timeout handling",
+        "issue-isolator": "Failure location identified",
+        "resolution-retry": "Focused correction applied successfully",
+        "finalizing": "Terminal result with full evidence"
+      }
+    },
+    "terminal": true
+  }
+}

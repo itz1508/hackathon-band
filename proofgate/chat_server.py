@@ -10,6 +10,7 @@ Entry method: direct Human API submission to Intake, followed by Band agent hand
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import settings
 from .agent_supervisor import AgentSupervisor
+from .band_adapter import ROLE_BY_KEY
 from .band_human_client import BandHumanAPIError, BandHumanClient
 from .chat_entry import ChatEntryError, prepare_intake_message
 from .chat_models import ChatSendRequest, ChatSendResponse, ChatStatusResponse
@@ -31,13 +33,15 @@ from .mirror import BandMirror
 _supervisor: AgentSupervisor | None = None
 _mirror: BandMirror | None = None
 _submitted_request_ids: set[str] = set()
+_active_room_id: str | None = None
+_relay_task: asyncio.Task[None] | None = None
 
 
 # --- Lifespan ---
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _supervisor, _mirror
+    global _supervisor, _mirror, _relay_task
 
     _mirror = BandMirror()
 
@@ -51,8 +55,16 @@ async def lifespan(app: FastAPI):
             if r["status"] == "failed":
                 _supervisor.restart_role(r["role"])
 
+    _relay_task = asyncio.create_task(_relay_loop())
+
     yield
 
+    if _relay_task:
+        _relay_task.cancel()
+        try:
+            await _relay_task
+        except asyncio.CancelledError:
+            pass
     if _supervisor:
         _supervisor.stop_all()
 
@@ -100,7 +112,7 @@ async def runtime_status() -> dict[str, Any]:
 
 @app.post("/internal/runtime/start")
 async def runtime_start() -> dict[str, Any]:
-    global _supervisor
+    global _supervisor, _active_room_id
     if _supervisor and _supervisor.all_running():
         return {"status": "already_running", "agents": _supervisor.status()}
 
@@ -114,6 +126,23 @@ async def runtime_start() -> dict[str, Any]:
     for r in results:
         if r["status"] == "failed":
             _supervisor.restart_role(r["role"])
+
+    sender = _human_client()
+    sponsor_key = settings.band_intake_api_key()
+    room_id = settings.band_room_id()
+    if sender and sponsor_key:
+        discovered = await sender.discover_workflow_room(
+            sponsor_key,
+            {agent.handle for agent in ROLE_BY_KEY.values()},
+            settings.band_sender_handle(),
+        )
+        if discovered:
+            _active_room_id = discovered
+            room_id = discovered
+    if sender and room_id and sponsor_key:
+        await sender.ensure_room_membership(
+            room_id, settings.band_sender_handle(), sponsor_key
+        )
 
     return {"status": "started", "agents": _supervisor.status()}
 
@@ -134,6 +163,10 @@ def _human_client() -> BandHumanClient | None:
     return BandHumanClient(api_key=api_key, base_url=settings.band_api_base_url())
 
 
+def _room_id() -> str:
+    return _active_room_id or settings.band_room_id()
+
+
 def _safe_band_error(exc: Exception) -> str:
     if isinstance(exc, BandHumanAPIError):
         if exc.status in (401, 403):
@@ -149,13 +182,54 @@ def _message_id(payload: dict[str, Any]) -> str:
     return str(value or "accepted")
 
 
+async def _relay_loop() -> None:
+    while True:
+        try:
+            await _relay_once()
+        except Exception:
+            pass
+        await asyncio.sleep(1)
+
+
+async def _relay_once() -> None:
+    if not _mirror or not _supervisor or not _supervisor.all_running():
+        return
+    client = _human_client()
+    room_id = _room_id()
+    if not client or not room_id:
+        return
+    for event in _mirror.relay_candidates():
+        packet = event["packet"]
+        target_role = packet.get("to_role")
+        target = ROLE_BY_KEY.get(target_role)
+        if not target:
+            continue
+        participant = await client.resolve_participant(room_id, target.handle)
+        participant_id = (participant or {}).get("id") or (participant or {}).get("participant_id")
+        if not participant_id:
+            continue
+        wire_content = f"{target.handle} {event['content']}"
+        await client.send_message(
+            room_id,
+            wire_content,
+            [{"id": str(participant_id), "handle": target.handle.lstrip("@"), "name": target.display_name}],
+        )
+        _mirror.record_event(
+            event_key=f"{event['event_key']}:relay",
+            packet=packet,
+            event_type="relay",
+            delivery_state="sent",
+            content=event["content"],
+        )
+
+
 @app.get("/internal/chat/status", response_model=ChatStatusResponse)
 async def chat_status() -> ChatStatusResponse:
     room_url = settings._env("BAND_ROOM_URL", "")
     all_running = _supervisor.all_running() if _supervisor else False
     agents = _supervisor.status() if _supervisor else []
     agents_running = sum(1 for item in agents if item.get("running"))
-    room_id = settings.band_room_id()
+    room_id = _room_id()
     client = _human_client()
     band_connected = False
     room_selected = False
@@ -214,7 +288,7 @@ async def chat_send(request: ChatSendRequest) -> ChatSendResponse:
         )
 
     client = _human_client()
-    room_id = settings.band_room_id()
+    room_id = _room_id()
     if not client or not room_id:
         raise HTTPException(
             status_code=503,
@@ -250,7 +324,10 @@ async def chat_send(request: ChatSendRequest) -> ChatSendResponse:
             intake_handle=settings.band_intake_handle(),
             intake_participant_id=intake_id,
         )
-        sent = await client.send_message(room_id, prepared.band_content, prepared.mentions)
+        wire_content = prepared.band_content
+        if "force_failure" in request.constraints:
+            wire_content += "\n[constraint:force_failure]"
+        sent = await client.send_message(room_id, wire_content, prepared.mentions)
     except ChatEntryError as exc:
         if request_id:
             _submitted_request_ids.discard(request_id)
@@ -398,6 +475,7 @@ async def get_test_inputs() -> dict[str, Any]:
                         "label": content.get("label", f.stem.replace("-", " ").title()),
                         "path": f"{prefix}/{f.name}",
                         "request_text": content.get("request_text", ""),
+                        "constraints": content.get("constraints", []),
                         "expected_workflow_path": content.get("expected_workflow_path", []),
                         "expected_outcome": content.get("expected_outcome", ""),
                     })

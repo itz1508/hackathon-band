@@ -67,11 +67,12 @@ class ChatSendTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["message_id"], "message-1")
         self.assertIsNone(resp.json()["run_id"])
-        band.send_message.assert_awaited_once_with(
-            "room-1",
-            "@itz1508/intake Fix the login timeout.",
-            [{"id": "intake-1", "handle": "itz1508/intake", "name": "Intake Agent"}],
-        )
+        sent_args = band.send_message.await_args.args
+        self.assertEqual(sent_args[0], "room-1")
+        self.assertEqual(sent_args[1], "@itz1508/intake Fix the login timeout.")
+        self.assertEqual(sent_args[2], [
+            {"id": "intake-1", "handle": "itz1508/intake", "name": "Intake Agent"}
+        ])
 
     @patch("proofgate.chat_server._human_client")
     @patch("proofgate.chat_server.settings")
@@ -178,6 +179,18 @@ class ChatRunTests(unittest.TestCase):
         self.assertIn("resolution-retry", data["stage_results"])
         self.assertEqual(data["workflow_path"].count("resolution"), 1)
         self.assertIn("resolution-retry", data["workflow_path"])
+
+
+class BandSenderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_participant_resolution_normalizes_at_prefix(self):
+        from proofgate.band_human_client import BandHumanClient
+
+        client = BandHumanClient(api_key="test")
+        client.list_participants = AsyncMock(return_value=[
+            {"id": "planner-id", "handle": "itz1508/planner"}
+        ])
+        participant = await client.resolve_participant("room-1", "@itz1508/planner")
+        self.assertEqual(participant["id"], "planner-id")
 
 
 class AgentSupervisorTests(unittest.TestCase):

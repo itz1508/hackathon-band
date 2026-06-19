@@ -1,13 +1,59 @@
 /** ProofGate for Band — direct submission and live workflow processing. */
 
+/* ============================================================
+   STAGE DEFINITIONS — one row per logical stage
+   ============================================================ */
 const WORKFLOW_STAGES = [
-  { key: 'intake', label: 'Intake', responsibility: 'Bound the request and preserve its constraints.' },
-  { key: 'planner', label: 'Plan', responsibility: 'Define measurable requirements, scope, and risks.' },
-  { key: 'resolution', label: 'Resolution', responsibility: 'Produce and assess the proposed solution.' },
-  { key: 'issue-isolator', label: 'Issue Isolation', responsibility: 'Explain a failed attempt and focus recovery.', optional: true },
-  { key: 'resolution-retry', label: 'Resolution Retry', responsibility: 'Retry once using the isolation evidence.', optional: true },
-  { key: 'finalizing', label: 'Finalizing', responsibility: 'Deliver one terminal result with evidence.' },
+  { key: 'human-request', label: 'Human Request', summary: 'Request submitted' },
+  { key: 'intake', label: 'Intake', summary: 'Structured request created' },
+  { key: 'planner', label: 'Plan', summary: 'Success criteria defined' },
+  { key: 'resolution', label: 'Resolution', summary: 'Checking the proposed result against requirements' },
+  { key: 'issue-isolator', label: 'Issue Isolation', summary: 'Locating the exact failure', optional: true },
+  { key: 'resolution-retry', label: 'Resolution Retry', summary: 'Applying the focused correction', optional: true },
+  { key: 'finalizing', label: 'Finalizing', summary: 'Final result delivered' },
 ];
+
+/* Stage state machine: waiting → thinking → processing → completed|failed */
+const STAGE_LABELS = {
+  waiting: 'WAITING',
+  thinking: 'THINKING',
+  processing: 'PROCESSING',
+  completed: 'COMPLETED',
+  failed: 'FAILED',
+  not_used: 'NOT USED',
+};
+
+const STAGE_SUMMARIES = {
+  'human-request': { waiting: 'Waiting', thinking: 'Preparing request', processing: 'Submitting', completed: 'Request submitted', failed: 'Submission failed' },
+  'intake': { waiting: 'Waiting for request', thinking: 'Preparing structured output', processing: 'Building intake record', completed: 'Structured request created', failed: 'Intake failed' },
+  'planner': { waiting: 'Waiting for Intake handoff', thinking: 'Preparing success requirements', processing: 'Validating scope and building the Resolution handoff', completed: 'Success criteria defined and sent to Resolution', failed: 'Planning failed' },
+  'resolution': { waiting: 'Waiting for Plan handoff', thinking: 'Checking requirements', processing: 'Checking the proposed result against requirements', completed: 'Requirements met', failed: 'One or more requirements were not met' },
+  'issue-isolator': { waiting: 'Waiting for failure data', thinking: 'Locating the exact failure', processing: 'Building a focused recovery handoff', completed: 'Failure isolated and retry handoff created', failed: 'Isolation failed', not_used: 'Not required' },
+  'resolution-retry': { waiting: 'Waiting for isolation handoff', thinking: 'Preparing focused correction', processing: 'Applying the focused correction', completed: 'Focused correction passed validation', failed: 'Focused correction did not satisfy requirements', not_used: 'Not required' },
+  'finalizing': { waiting: 'Waiting for Resolution', thinking: 'Preparing final delivery', processing: 'Delivering terminal result', completed: 'Final result delivered', failed: 'Delivery failed' },
+};
+
+/* Event reason → which stage it affects and what state */
+const EVENT_TO_STAGE = {
+  'new_request': { stage: 'human-request', state: 'completed' },
+  'intake_complete': { stage: 'intake', state: 'completed' },
+  'plan_complete': { stage: 'planner', state: 'completed' },
+  'requirements_met': { stage: 'resolution', state: 'completed' },
+  'requirements_not_met': { stage: 'resolution', state: 'failed' },
+  'focused_retry': { stage: 'issue-isolator', state: 'completed' },
+  'retry_exhausted': { stage: 'resolution-retry', state: 'failed' },
+  'terminal_result': { stage: 'finalizing', state: 'completed' },
+};
+
+/* Map to_role in events to which stage is now receiving work */
+const ROLE_TO_STAGE = {
+  'intake': 'intake',
+  'planner': 'planner',
+  'resolution': 'resolution',
+  'issue-isolator': 'issue-isolator',
+  'finalizing': 'finalizing',
+  'human': 'finalizing',
+};
 
 const COMMANDS = [
   { id: 'fix', label: 'Fix', template: 'Fix the following issue: [describe the problem and target file].' },
@@ -22,16 +68,133 @@ let submissionPending = false;
 let activeObjective = '';
 let activeRunId = '';
 let lastSequence = 0;
+let selectedConstraints = [];
+
+/* Stage state tracking — deduplicated */
+let stageStates = {};
 
 document.addEventListener('DOMContentLoaded', async () => {
   renderCommands();
   initTextarea();
   initActions();
   initRuntime();
+  resetStageStates();
   renderWorkflow();
   await Promise.all([loadTestInputs(), checkStatus()]);
 });
 
+function resetStageStates() {
+  stageStates = {};
+  WORKFLOW_STAGES.forEach(s => {
+    stageStates[s.key] = { status: 'waiting', updated_at: null };
+  });
+}
+
+/* ============================================================
+   STAGE STATE COMPUTATION FROM EVENTS (deduplication)
+   ============================================================ */
+function computeStageStates() {
+  resetStageStates();
+  if (!selectedRun) {
+    if (submissionPending) {
+      stageStates['human-request'].status = 'processing';
+    }
+    return;
+  }
+
+  const events = selectedRun.conversation_events || [];
+  const results = selectedRun.stage_results || {};
+  const path = selectedRun.workflow_path || [];
+  const outcome = selectedRun.outcome || '';
+
+  // Human request is always completed once we have a run
+  stageStates['human-request'].status = 'completed';
+
+  // Walk events to determine transitions (deduplicated by stage)
+  const seenReasons = new Set();
+  for (const ev of events) {
+    const reason = ev.event || '';
+    if (seenReasons.has(reason)) continue; // deduplicate
+    seenReasons.add(reason);
+
+    const mapping = EVENT_TO_STAGE[reason];
+    if (mapping) {
+      stageStates[mapping.stage].status = mapping.state;
+      stageStates[mapping.stage].updated_at = ev.timestamp;
+    }
+  }
+
+  // Use stage_results from the run data to fill in
+  for (const [key, result] of Object.entries(results)) {
+    const stageKey = key === 'issue_isolation' ? 'issue-isolator' : key;
+    if (stageStates[stageKey]) {
+      if (result.role_success) {
+        stageStates[stageKey].status = 'completed';
+      } else if (result.role_success === false) {
+        stageStates[stageKey].status = 'failed';
+      }
+    }
+  }
+
+  // Determine current processing stage from workflow_path
+  if (!outcome && path.length > 0) {
+    const current = path[path.length - 1];
+    const currentKey = current === 'issue_isolation' ? 'issue-isolator' : current;
+    if (stageStates[currentKey] && stageStates[currentKey].status === 'waiting') {
+      stageStates[currentKey].status = 'processing';
+    }
+  }
+
+  // If terminal, mark finalizing as completed
+  if (outcome) {
+    stageStates['finalizing'].status = 'completed';
+  }
+
+  // Mark optional stages as not_used if terminal and they never activated
+  if (outcome) {
+    if (stageStates['issue-isolator'].status === 'waiting') {
+      stageStates['issue-isolator'].status = 'not_used';
+    }
+    if (stageStates['resolution-retry'].status === 'waiting') {
+      stageStates['resolution-retry'].status = 'not_used';
+    }
+  }
+
+  // If resolution failed and issue-isolator hasn't been marked, set it processing
+  if (stageStates['resolution'].status === 'failed') {
+    if (stageStates['issue-isolator'].status === 'waiting') {
+      stageStates['issue-isolator'].status = 'processing';
+    }
+    // If isolation completed, resolution-retry should be processing
+    if (stageStates['issue-isolator'].status === 'completed' && stageStates['resolution-retry'].status === 'waiting') {
+      stageStates['resolution-retry'].status = 'processing';
+    }
+  }
+
+  // Advance waiting stages that should be thinking/processing based on predecessor completion
+  const order = WORKFLOW_STAGES.map(s => s.key);
+  for (let i = 1; i < order.length; i++) {
+    const prev = order[i - 1];
+    const curr = order[i];
+    // Skip optional stages in the chain for advancement
+    if (stageStates[prev].status === 'completed' && stageStates[curr].status === 'waiting') {
+      // Only auto-advance if this stage is in the path or is next logically
+      if (path.includes(curr) || path.includes(curr.replace('-', '_'))) {
+        stageStates[curr].status = 'processing';
+      }
+    }
+  }
+}
+
+function getStageSummary(stageKey, status) {
+  const summaries = STAGE_SUMMARIES[stageKey];
+  if (!summaries) return '';
+  return summaries[status] || summaries['waiting'] || '';
+}
+
+/* ============================================================
+   COMMANDS
+   ============================================================ */
 function renderCommands() {
   const grid = document.getElementById('command-grid');
   grid.innerHTML = COMMANDS.map(command =>
@@ -42,6 +205,7 @@ function renderCommands() {
     if (!button) return;
     const command = COMMANDS.find(item => item.id === button.dataset.cmd);
     if (!command) return;
+    selectedConstraints = [];
     const input = document.getElementById('chat-input');
     input.value = command.template;
     input.focus();
@@ -60,18 +224,34 @@ async function loadTestInputs() {
       return;
     }
     container.innerHTML = data.items.map(item =>
-      `<button class="test-input-item" data-request="${esc(item.request_text)}">
+      `<button class="test-input-item" data-request="${esc(item.request_text)}" data-constraints="${esc(JSON.stringify(item.constraints || []))}" data-path="${esc(item.path || '')}">
         <span class="ti-label">${esc(item.label)}</span>
         <span class="ti-meta">${esc(item.expected_outcome)}</span>
       </button>`
     ).join('');
     container.querySelectorAll('.test-input-item').forEach(item => {
-      item.addEventListener('click', () => {
+      item.addEventListener('click', async () => {
         const input = document.getElementById('chat-input');
         input.value = item.dataset.request;
+        selectedConstraints = JSON.parse(item.dataset.constraints || '[]');
         input.focus();
         updatePreview();
         updateSendState();
+        // Load demo run if available
+        const path = item.dataset.path;
+        if (path) {
+          try {
+            const resp = await fetch(`/${path}`);
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data.demo_run) {
+                selectedRun = data.demo_run;
+                activeRunId = data.demo_run.run_id || '';
+                renderRun();
+              }
+            }
+          } catch (_e) { /* ignore */ }
+        }
       });
     });
   } catch (_error) {
@@ -81,6 +261,7 @@ async function loadTestInputs() {
 
 function initTextarea() {
   document.getElementById('chat-input').addEventListener('input', () => {
+    selectedConstraints = [];
     updatePreview();
     updateSendState();
   });
@@ -124,7 +305,7 @@ async function sendToBand() {
     const response = await fetch('/internal/chat/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, client_request_id: requestId }),
+      body: JSON.stringify({ text, constraints: selectedConstraints, client_request_id: requestId }),
     });
     const data = await response.json();
     if (!response.ok) {
@@ -264,51 +445,69 @@ function resetProcessingView() {
   document.getElementById('terminal-body').innerHTML = '<p class="terminal-pending">Request submitted. Waiting for Intake delivery…</p>';
   document.getElementById('artifact-tabs').innerHTML = '';
   document.getElementById('artifact-content').innerHTML = '<p class="artifact-pending">Stage outputs appear as participants complete.</p>';
+  resetStageStates();
+  stageStates['human-request'].status = 'processing';
   renderWorkflow();
 }
 
 function renderRun() {
+  computeStageStates();
   renderWorkflow();
   renderResult();
   renderConversation();
   renderArtifacts();
 }
 
-function stageState(stage) {
-  if (!selectedRun) return stage.key === 'intake' && submissionPending ? 'processing' : 'waiting';
-  const results = selectedRun.stage_results || {};
-  if (results[stage.key]) return results[stage.key].role_success ? 'delivered' : 'failed';
-  const path = selectedRun.workflow_path || [];
-  if (stage.optional && selectedRun.terminal) return 'skipped';
-  const current = path[path.length - 1];
-  if (current === stage.key) return 'processing';
-  if (stage.key === 'finalizing' && selectedRun.outcome) return 'delivered';
-  return 'waiting';
-}
-
+/* ============================================================
+   WORKFLOW DISPLAY — one card per logical stage with state
+   ============================================================ */
 function renderWorkflow() {
   const container = document.getElementById('workflow-steps-container');
-  const results = selectedRun?.stage_results || {};
   container.innerHTML = `<div class="workflow-grid">${WORKFLOW_STAGES.map((stage, index) => {
-    const state = stageState(stage);
-    const result = results[stage.key] || {};
-    const unmet = result.unmet_requirements || [];
-    const evidence = result.evidence || [];
-    const output = result.output || {};
-    const summary = result.role_success || output.summary || output.solution || output.final_summary || stage.responsibility;
-    return `<article class="workflow-card stage-${state}">
-      <div class="workflow-card-head"><span class="stage-index">${String(index + 1).padStart(2, '0')}</span><h3>${stage.label}</h3><span class="stage-state">${state}</span></div>
+    const state = stageStates[stage.key]?.status || 'waiting';
+    const cssState = state === 'completed' ? 'delivered' : state === 'not_used' ? 'skipped' : state;
+    const summary = getStageSummary(stage.key, state);
+    return `<article class="workflow-card stage-${cssState}">
+      <div class="workflow-card-head"><span class="stage-index">${String(index + 1).padStart(2, '0')}</span><h3>${stage.label}</h3><span class="stage-state">${STAGE_LABELS[state] || state}</span></div>
       <p>${esc(summary)}</p>
-      ${evidence.length ? `<div class="stage-meta">Evidence: ${esc(evidence.length)} item${evidence.length === 1 ? '' : 's'}</div>` : ''}
-      ${unmet.length ? `<div class="stage-unmet">Unmet: ${esc(unmet.join(', '))}</div>` : ''}
     </article>`;
   }).join('')}</div>`;
+
   const note = document.getElementById('workflow-note');
   note.textContent = selectedRun?.terminal
     ? `Terminal delivery completed with outcome: ${selectedRun.outcome}`
     : 'Band advances each structured packet automatically. One isolation-guided retry is available.';
 }
 
+/* ============================================================
+   BAND DELIVERY TRACE — deduplicated stage status view
+   ============================================================ */
+function renderConversation() {
+  document.getElementById('terminal-title').textContent = `proofgate.band.v1 — ${selectedRun?.outcome || 'processing'}`;
+
+  // Build deduplicated stage status lines instead of raw events
+  const lines = [];
+  for (const stage of WORKFLOW_STAGES) {
+    const state = stageStates[stage.key]?.status || 'waiting';
+    if (state === 'waiting') continue; // Don't show stages that haven't started
+    if (state === 'not_used') continue; // Don't clutter the trace with unused stages
+
+    const summary = getStageSummary(stage.key, state);
+    const stateClass = state === 'completed' ? 'term-success' :
+                       state === 'failed' ? 'term-fail' :
+                       state === 'processing' || state === 'thinking' ? '' :
+                       '';
+    lines.push(`<div class="term-line ${stateClass}"><span class="term-sender">${esc(stage.label)}</span><span class="term-arrow">→</span><span class="term-receiver">${esc(STAGE_LABELS[state])}</span><span class="term-info">${esc(summary)}</span></div>`);
+  }
+
+  document.getElementById('terminal-body').innerHTML = lines.length
+    ? lines.join('')
+    : '<p class="terminal-pending">Waiting for the first mirrored Band event…</p>';
+}
+
+/* ============================================================
+   DELIVERED RESULT
+   ============================================================ */
 function renderResult() {
   const element = document.getElementById('result-card');
   const final = selectedRun?.final_result || {};
@@ -339,14 +538,9 @@ function valueSummary(value) {
   return value.solution || value.summary || value.final_summary || JSON.stringify(value);
 }
 
-function renderConversation() {
-  const events = selectedRun?.conversation_events || [];
-  document.getElementById('terminal-title').textContent = `proofgate.band.v1 — ${selectedRun?.outcome || 'processing'}`;
-  document.getElementById('terminal-body').innerHTML = events.length
-    ? events.map(event => `<div class="term-line"><span class="term-sender">${esc(event.sender_role || 'human')}</span><span class="term-arrow">→</span><span class="term-receiver">${esc(event.recipient_role)}</span><span class="term-info">${esc(event.summary || event.event)}</span></div>`).join('')
-    : '<p class="terminal-pending">Waiting for the first mirrored Band event…</p>';
-}
-
+/* ============================================================
+   STAGE RESULTS
+   ============================================================ */
 function renderArtifacts() {
   const results = selectedRun?.stage_results || {};
   const keys = Object.keys(results);

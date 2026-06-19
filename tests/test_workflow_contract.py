@@ -1,6 +1,6 @@
 import unittest
 
-from proofgate.remote_agent import fallback_result
+from proofgate.remote_agent import _strip_target_prefix, fallback_result
 from proofgate.workflow import PacketValidationError, advance, new_packet, stage_result, validate_stage_result
 
 
@@ -16,6 +16,18 @@ def run_until_terminal(value):
 
 
 class WorkflowContractTests(unittest.TestCase):
+    def test_visible_target_prefix_preserves_packet_json(self):
+        content = '@itz1508/planner {"schema_version":"proofgate.band.v1"}'
+        self.assertEqual(
+            _strip_target_prefix(content),
+            '{"schema_version":"proofgate.band.v1"}',
+        )
+        rewritten = '@[[ccfc44c5-8b85-4a03-bf5b-d5bfd3802879]] {"schema_version":"proofgate.band.v1"}'
+        self.assertEqual(
+            _strip_target_prefix(rewritten),
+            '{"schema_version":"proofgate.band.v1"}',
+        )
+
     def test_roles_exclude_tester_and_user_decision(self):
         value = run_until_terminal(packet())
         stages = [item["stage"] for item in value["stage_results"]]

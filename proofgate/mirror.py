@@ -108,3 +108,24 @@ class BandMirror:
                 item["packet"] = json.loads(item.pop("packet_json")) if item["packet_json"] else None
                 result.append(item)
             return result
+
+    def relay_candidates(self, limit: int = 100) -> list[dict[str, Any]]:
+        """Return unrelayed agent outgoing events in creation order."""
+        with closing(self._connect()) as db, db:
+            rows = db.execute(
+                """SELECT * FROM events AS outgoing
+                   WHERE outgoing.event_type='outgoing'
+                     AND outgoing.to_role!='human'
+                     AND NOT EXISTS (
+                       SELECT 1 FROM events AS relayed
+                       WHERE relayed.event_key=outgoing.event_key || ':relay'
+                     )
+                   ORDER BY outgoing.id LIMIT ?""",
+                (limit,),
+            )
+            result = []
+            for row in rows:
+                item = dict(row)
+                item["packet"] = json.loads(item.pop("packet_json"))
+                result.append(item)
+            return result

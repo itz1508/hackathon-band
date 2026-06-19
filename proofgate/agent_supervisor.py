@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -53,19 +54,24 @@ class AgentSupervisor:
         if existing and existing.process and existing.process.poll() is None:
             return {"role": role, "status": "already_running", "pid": existing.pid}
 
-        cmd = [sys.executable, "-m", "proofgate.remote_agent", "--no-reconnect", role]
+        cmd = [sys.executable, "-m", "proofgate.remote_agent", role]
+        log_dir = Path(tempfile.gettempdir()) / "proofgate-agents"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        stdout_path = log_dir / f"{role}.stdout.log"
+        stderr_path = log_dir / f"{role}.stderr.log"
         try:
-            proc = subprocess.Popen(
-                cmd,
-                cwd=str(self.working_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+            with stdout_path.open("a", encoding="utf-8") as stdout_log, stderr_path.open("a", encoding="utf-8") as stderr_log:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(self.working_dir),
+                    stdout=stdout_log,
+                    stderr=stderr_log,
+                    text=True,
+                )
             # Brief check that process didn't immediately exit
             time.sleep(0.5)
             if proc.poll() is not None:
-                stderr = proc.stderr.read() if proc.stderr else ""
+                stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
                 return {"role": role, "status": "failed", "error": stderr.strip()[:500]}
 
             now = datetime.now(timezone.utc).isoformat()
