@@ -1,0 +1,13 @@
+{
+  "run_id": "pending",
+  "status": "pending",
+  "objective": "",
+  "constraints": [],
+  "outcome": "",
+  "retry_count": 0,
+  "roles_participated": [],
+  "workflow_path": [],
+  "stage_results": {},
+  "conversation_events": [],
+  "final_result": {}
+}

@@ -1,15 +1,15 @@
+intake:
+  agent_id: "<intake-agent-uuid>"
+  api_key: "<intake-agent-api-key>"
 planner:
   agent_id: "<planner-agent-uuid>"
   api_key: "<planner-agent-api-key>"
-
-engineer:
-  agent_id: "<engineer-agent-uuid>"
-  api_key: "<engineer-agent-api-key>"
-
-tester:
-  agent_id: "<tester-agent-uuid>"
-  api_key: "<tester-agent-api-key>"
-
-reviewer:
-  agent_id: "<reviewer-agent-uuid>"
-  api_key: "<reviewer-agent-api-key>"
+resolution:
+  agent_id: "<resolution-or-existing-engineer-agent-uuid>"
+  api_key: "<resolution-or-existing-engineer-agent-api-key>"
+issue-isolator:
+  agent_id: "<issue-isolator-agent-uuid>"
+  api_key: "<issue-isolator-agent-api-key>"
+finalizing:
+  agent_id: "<finalizing-or-existing-reviewer-agent-uuid>"
+  api_key: "<finalizing-or-existing-reviewer-agent-api-key>"

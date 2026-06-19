@@ -1,0 +1,6 @@
+{
+  "label": "Fix Planner Handoff",
+  "request_text": "Fix the Planner handoff. Inspect the local repository and determine why Planner does not receive or forward the Intake packet. Correct the actual failure and prove Planner sends the packet to Resolution.",
+  "expected_workflow_path": ["intake", "planner", "resolution", "finalizing"],
+  "expected_outcome": "completed"
+}

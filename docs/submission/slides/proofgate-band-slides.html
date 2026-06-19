@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ProofGate for Band — Slides</title>
+<style>
+@page { size: landscape; margin: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; background: #0d0f14; color: #e8eaf0; }
+.slide {
+  width: 100vw; height: 100vh;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  padding: 60px 80px;
+  page-break-after: always;
+  position: relative;
+}
+.slide:last-child { page-break-after: avoid; }
+.slide-number { position: absolute; bottom: 24px; right: 40px; font-size: 14px; color: #5a6480; }
+h1 { font-size: 48px; font-weight: 700; margin-bottom: 16px; text-align: center; }
+h2 { font-size: 36px; font-weight: 700; margin-bottom: 24px; color: #4f6ef7; text-align: center; }
+h3 { font-size: 24px; font-weight: 600; margin-bottom: 12px; }
+p, li { font-size: 22px; line-height: 1.6; color: #9aa5c0; max-width: 900px; text-align: center; }
+ul { list-style: none; text-align: left; max-width: 800px; }
+ul li { padding: 8px 0; font-size: 20px; }
+ul li::before { content: "→ "; color: #4f6ef7; font-weight: 700; }
+.highlight { color: #4f6ef7; }
+.workflow-diagram { font-family: 'Cascadia Code', monospace; font-size: 18px; background: #141820; border: 1px solid #1e2535; border-radius: 6px; padding: 32px 40px; text-align: left; line-height: 2; white-space: pre; color: #c0c8d8; margin-top: 24px; }
+.role-table { border-collapse: collapse; margin-top: 20px; font-size: 18px; }
+.role-table th { text-align: left; padding: 10px 24px; color: #4f6ef7; border-bottom: 1px solid #252d3d; }
+.role-table td { padding: 10px 24px; color: #9aa5c0; border-bottom: 1px solid #1e2535; }
+.role-table td:first-child { color: #e8eaf0; font-weight: 600; }
+.badge-row { display: flex; gap: 12px; margin-top: 20px; flex-wrap: wrap; justify-content: center; }
+.badge { padding: 6px 16px; font-size: 14px; font-weight: 600; border-radius: 14px; background: #1e2d5e; color: #4f6ef7; border: 1px solid #4f6ef7; }
+.footer-label { position: absolute; bottom: 24px; left: 40px; font-size: 13px; color: #5a6480; }
+@media print {
+  .slide { width: 100%; height: 100vh; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+
+<!-- Slide 1: Problem and Product -->
+<div class="slide">
+  <h1>ProofGate <span class="highlight">for Band</span></h1>
+  <p>Structured multi-agent resolution through Band</p>
+  <div class="badge-row">
+    <span class="badge">Five Specialized Agents</span>
+    <span class="badge">Real Band Collaboration</span>
+    <span class="badge">One Controlled Retry</span>
+  </div>
+  <p style="margin-top: 40px; font-size: 20px;">When one opaque autonomous response is not enough,<br>ProofGate makes multi-agent work visible and inspectable.</p>
+  <span class="footer-label">Band of Agents Hackathon 2026</span>
+  <span class="slide-number">1 / 5</span>
+</div>
+
+<!-- Slide 2: Five-Agent Workflow -->
+<div class="slide">
+  <h2>Five-Agent Band Workflow</h2>
+  <table class="role-table">
+    <tr><th>Agent</th><th>Responsibility</th></tr>
+    <tr><td>Intake</td><td>Captures objective, constraints, bounded task</td></tr>
+    <tr><td>Plan</td><td>Defines measurable requirements, scope, risks</td></tr>
+    <tr><td>Resolution</td><td>Produces solution, assesses every requirement</td></tr>
+    <tr><td>Issue Isolation</td><td>Explains failure, supplies focused retry instruction</td></tr>
+    <tr><td>Finalizing</td><td>Produces and delivers the terminal result — workflow ends</td></tr>
+  </table>
+  <div class="workflow-diagram">Human → Intake → Plan → Resolution
+                        ├─ requirements met → Finalizing
+                        └─ requirements not met → Issue Isolation
+                                                    ↓
+                                              Resolution retry
+                                                    ↓
+                                                Finalizing</div>
+  <span class="slide-number">2 / 5</span>
+</div>
+
+<!-- Slide 3: Structured Collaboration and Recovery -->
+<div class="slide">
+  <h2>Structured Collaboration</h2>
+  <ul>
+    <li>Band carries the full accumulated packet at every handoff</li>
+    <li>Stage results, evidence, quality, uncertainty grow with each agent</li>
+    <li>Routing is deterministic — based on <span class="highlight">requirements_met</span></li>
+    <li>Issue Isolation preserves exact failure context for retry</li>
+    <li>Only one retry cycle is allowed — controlled recovery</li>
+    <li>Terminal outcomes: completed · resolved_after_isolation · blocked · failed</li>
+  </ul>
+  <p style="margin-top: 32px; font-size: 18px;">Band is the real collaboration layer — not a wrapper, notification system, or output channel.</p>
+  <span class="slide-number">3 / 5</span>
+</div>
+
+<!-- Slide 4: Real Band Demonstration -->
+<div class="slide">
+  <h2>Real Band Demonstration</h2>
+  <div class="workflow-diagram">human        → @itz1508/intake          new_request
+intake       → @itz1508/planner         intake_complete
+planner      → @itz1508/resolution      plan_complete
+resolution   → @itz1508/issue-isolator  requirements_not_met
+issue-isolator → @itz1508/resolution    focused_retry
+resolution   → @itz1508/finalizing      requirements_met
+finalizing   → result delivered          terminal_result · workflow complete
+
+outcome: resolved_after_isolation
+retry_count: 1</div>
+  <p style="margin-top: 24px; font-size: 18px;">
+    [Live Band room recording to be captured before submission]
+  </p>
+  <span class="slide-number">4 / 5</span>
+</div>
+
+<!-- Slide 5: Business Value and Next Steps -->
+<div class="slide">
+  <h2>Business Value</h2>
+  <ul>
+    <li><strong>Traceability</strong> — every handoff carries accumulated evidence</li>
+    <li><strong>Specialization</strong> — each agent owns one bounded concern</li>
+    <li><strong>Controlled recovery</strong> — failure handling is part of the contract</li>
+    <li><strong>Understandable outcomes</strong> — terminal results list all role contributions</li>
+    <li><strong>Enterprise fit</strong> — inspect multi-agent work instead of trusting one response</li>
+  </ul>
+  <h3 style="margin-top: 32px; color: #5a6480;">Known Limitations</h3>
+  <p style="font-size: 16px;">Live execution requires Band credentials · One retry by design · Website is explanatory only</p>
+  <h3 style="margin-top: 24px; color: #5a6480;">Next Step</h3>
+  <p style="font-size: 16px;">Cross-framework agents joining via Band · Real-time packet dashboard · CI/CD integration</p>
+  <span class="footer-label">github.com/itz1508/hackathon-band</span>
+  <span class="slide-number">5 / 5</span>
+</div>
+
+</body>
+</html>
+<!--
+  PRINT TO PDF INSTRUCTIONS:
+  1. Open this HTML file in a browser (Chrome recommended)
+  2. Press Ctrl+P (or Cmd+P on Mac)
+  3. Destination: Save as PDF
+  4. Layout: Landscape
+  5. Margins: None
+  6. Background graphics: Enabled
+  7. Save as: proofgate-band-slides.pdf
+-->

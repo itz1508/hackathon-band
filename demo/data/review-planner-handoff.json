@@ -1,0 +1,6 @@
+{
+  "label": "Review Planner Handoff",
+  "request_text": "Review the Planner handoff without editing files. Inspect the local repository and report the exact point where Intake-to-Planner delivery or Planner-to-Resolution forwarding fails.",
+  "expected_workflow_path": ["intake", "planner", "resolution", "finalizing"],
+  "expected_outcome": "completed"
+}

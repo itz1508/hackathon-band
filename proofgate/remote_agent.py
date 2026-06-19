@@ -1,292 +1,159 @@
-"""Band SDK runner for ProofGate remote agents.
-
-This file follows Band's remote-agent shape:
-
-    agent = Agent.create(adapter=..., agent_id=agent_id, api_key=api_key)
-    await agent.run()
-
-The live runner uses Band SDK for the room connection and the OpenAI Python
-client directly for OpenAI-compatible model providers such as Featherless.
-"""
+"""Live Band remote-agent runner using the ProofGate structured packet."""
 from __future__ import annotations
 
 import argparse
 import asyncio
 import hashlib
+import json
 import os
 import re
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from .band_adapter import ROLE_BY_KEY
+from .mirror import BandMirror
+from .workflow import ROLES, advance, new_packet, stage_result, validate_packet, validate_stage_result
 
 RECONNECT_DELAY_SECONDS = 5.0
 
 
-ROLE_NOTES = {
-    "intake": (
-        "You are @itz1508/intake for ProofGate. Receive raw human code-change "
-        "requests, identify intent, constraints, missing information, and "
-        "send a structured task to @itz1508/planner when ready."
-    ),
-    "planner": (
-        "You are @itz1508/planner for ProofGate. Scope the task, define "
-        "scoped_files and success_criteria, then direct-message @itz1508/engineer."
-    ),
-    "engineer": (
-        "You are @itz1508/engineer for ProofGate. Produce the smallest patch "
-        "candidate and unified diff, then direct-message @itz1508/tester."
-    ),
-    "tester": (
-        "You are @itz1508/tester for ProofGate. Validate behavior, scope, and "
-        "hashes, then direct-message @itz1508/reviewer."
-    ),
-    "reviewer": (
-        "You are @itz1508/reviewer for ProofGate. Review validation, assemble "
-        "the proof packet, and direct-message @itz1508 with safe_to_apply."
-    ),
-    "issue-isolator": (
-        "You are @itz1508/issue-isolator for ProofGate. Isolate unresolved "
-        "validation or scope failures, explain why apply is blocked, and "
-        "direct-message @itz1508/reviewer with retry guidance."
-    ),
-}
-
-ROLE_TARGETS = {
-    "intake": "@itz1508/planner",
-    "planner": "@itz1508/engineer",
-    "engineer": "@itz1508/tester",
-    "tester": "@itz1508/reviewer",
-    "reviewer": "@itz1508",
-    "issue-isolator": "@itz1508/reviewer",
-}
-
-ROLE_TARGET_LABELS = {
-    "intake": "Planner",
-    "planner": "Engineer",
-    "engineer": "Tester",
-    "tester": "Reviewer",
-    "reviewer": "Human",
-    "issue-isolator": "Reviewer",
-}
-
-
 class ProofGateDirectAdapter:
-    """Minimal Band adapter backed by a direct OpenAI-compatible client."""
-
-    def __init__(self, *, role: str, llm_client: Any, model: str):
-        if role not in ROLE_NOTES:
-            roles = ", ".join(sorted(ROLE_NOTES))
-            raise ValueError(f"Unknown role {role!r}. Expected one of: {roles}")
-        self.role = role
-        self.llm_client = llm_client
-        self.model = model
-        self.agent_name = ""
-        self.agent_description = ""
-        self._processed_fingerprints: set[str] = set()
+    def __init__(self, *, role: str, llm_client: Any = None, model: str = "") -> None:
+        if role not in ROLES:
+            raise ValueError(f"Unknown role {role!r}")
+        self.role, self.llm_client, self.model = role, llm_client, model
+        self.mirror = BandMirror()
+        self._processed: set[str] = set()
 
     async def on_started(self, agent_name: str, agent_description: str) -> None:
-        self.agent_name = agent_name
-        self.agent_description = agent_description
+        return None
 
     async def on_cleanup(self, room_id: str) -> None:
         return None
 
     async def on_event(self, inp: Any) -> None:
-        await self.on_message(
-            msg=inp.msg,
-            tools=inp.tools,
-            history=inp.history,
-            participants_msg=inp.participants_msg,
-            contacts_msg=inp.contacts_msg,
-            is_session_bootstrap=inp.is_session_bootstrap,
-            room_id=inp.room_id,
-        )
+        await self.on_message(inp.msg, inp.tools, inp.history, inp.participants_msg,
+                              inp.contacts_msg, is_session_bootstrap=inp.is_session_bootstrap,
+                              room_id=inp.room_id)
 
-    async def on_message(
-        self,
-        msg: Any,
-        tools: Any,
-        history: Any,
-        participants_msg: str | None,
-        contacts_msg: str | None,
-        *,
-        is_session_bootstrap: bool,
-        room_id: str,
-    ) -> None:
-        target = ROLE_TARGETS[self.role]
-        user_prompt = self._user_prompt(msg, history, participants_msg, contacts_msg)
-        fingerprint = self._message_fingerprint(room_id, user_prompt)
-        if fingerprint in self._processed_fingerprints:
-            print(f"ProofGate {self.role} skipped duplicate message in {room_id}.", flush=True)
-            return
-        sender = getattr(msg, "sender_name", None) or getattr(msg, "sender_type", "unknown")
-        print(f"ProofGate {self.role} received message from {sender} in {room_id}.", flush=True)
-        if self.llm_client is None:
-            content = self._fallback_content(user_prompt)
-        else:
-            try:
-                response = await self.llm_client.chat.completions.create(
-                    model=self.model,
-                    max_tokens=4096,
-                    temperature=0,
-                    messages=[
-                        {"role": "system", "content": self._system_prompt(target)},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                )
-                content = self._extract_content(response)
-            except Exception as exc:
-                content = self._fallback_content(user_prompt)
-        await tools.send_message(content, mentions=[target])
-        self._processed_fingerprints.add(fingerprint)
-        print(f"ProofGate {self.role} sent handoff to {target}.", flush=True)
-
-    def _system_prompt(self, target: str) -> str:
-        return (
-            f"{ROLE_NOTES[self.role]}\n\n"
-            "You are participating in the ProofGate hackathon demo. "
-            "Return one concise structured handoff. Do not claim a real repository "
-            "mutation happened. Use these fields when relevant: what_wrong, "
-            "why_it_matters, how_to_fix, scoped_files, success_criteria, "
-            "simulated_diff, validation_summary, safe_to_apply, human_action, "
-            f"decision_reason. End by addressing {target}."
-        )
-
-    def _user_prompt(
-        self,
-        msg: Any,
-        history: Any,
-        participants_msg: str | None,
-        contacts_msg: str | None,
-    ) -> str:
-        parts = []
-        if participants_msg:
-            parts.append(f"Participants:\n{participants_msg}")
-        if contacts_msg:
-            parts.append(f"Contacts:\n{contacts_msg}")
-        history_text = self._history_text(history)
-        if history_text:
-            parts.append(f"Recent room history:\n{history_text}")
-        format_for_llm = getattr(msg, "format_for_llm", None)
-        incoming = format_for_llm() if callable(format_for_llm) else getattr(msg, "content", str(msg))
-        parts.append(f"Incoming message:\n{incoming}")
-        return "\n\n".join(parts)
-
-    def _history_text(self, history: Any) -> str:
-        raw = getattr(history, "raw", None)
-        if not raw:
-            return ""
-        formatted = []
-        for item in raw[-8:]:
-            sender = item.get("sender_name") or item.get("sender_type") or "Unknown"
-            content = item.get("content") or ""
-            formatted.append(f"[{sender}]: {content}")
-        return "\n".join(formatted)
-
-    def _message_fingerprint(self, room_id: str, user_prompt: str) -> str:
-        normalized = " ".join(user_prompt.split())
-        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        return f"{room_id}:{self.role}:{digest}"
-
-    def _extract_content(self, response: Any) -> str:
+    async def on_message(self, msg: Any, tools: Any, history: Any = None,
+                         participants_msg: str | None = None, contacts_msg: str | None = None,
+                         *, is_session_bootstrap: bool = False, room_id: str = "") -> None:
+        raw = getattr(msg, "content", msg)
+        if not isinstance(raw, str):
+            raw = str(raw)
         try:
-            content = response.choices[0].message.content
-        except (AttributeError, IndexError, TypeError):
-            content = ""
-        if not content:
-            content = (
-                "what_wrong: LLM provider returned an empty message.\n"
-                "why_it_matters: The handoff cannot be trusted without content.\n"
-                "how_to_fix: Retry with a provider response that includes a structured handoff.\n"
-                "safe_to_apply: false\n"
-                "human_action: retry"
-            )
-        return content
+            packet = json.loads(raw)
+        except json.JSONDecodeError:
+            if self.role != "intake":
+                return  # Silently skip non-JSON messages (human text, etc.)
+            packet = new_packet(run_id=str(uuid4()), task_id=str(uuid4()), room_id=room_id,
+                                objective=raw, constraints=[])
+        # Skip packets not addressed to this role
+        if packet.get("to_role") != self.role and self.role != "intake":
+            return
+        validate_packet(packet)
+        fingerprint = hashlib.sha256(f"{room_id}:{self.role}:{raw}".encode()).hexdigest()
+        if fingerprint in self._processed:
+            return
+        self.mirror.record_event(event_key=f"{fingerprint}:received", packet=packet,
+                                 event_type="received", delivery_state="delivered", content=raw)
+        result = await self._produce_result(packet)
+        validate_stage_result(result)
+        updated = advance(packet, result)
+        outgoing = json.dumps(updated, separators=(",", ":"), sort_keys=True)
+        outgoing_key = hashlib.sha256(outgoing.encode()).hexdigest()
+        self.mirror.record_event(event_key=f"{outgoing_key}:outgoing", packet=updated,
+                                 event_type="outgoing", delivery_state="pending", content=outgoing)
+        target = ROLE_BY_KEY[updated["to_role"]].handle if updated["to_role"] in ROLE_BY_KEY else "@itz1508"
+        try:
+            await tools.send_message(outgoing, mentions=[target])
+        except ValueError as ve:
+            # Mention failed — target may not be in room. Try adding them first.
+            try:
+                await tools.add_participant(target)
+                await tools.send_message(outgoing, mentions=[target])
+            except Exception:
+                self.mirror.record_event(event_key=f"{outgoing_key}:failed", packet=updated,
+                                         event_type="delivery", delivery_state="failed", content=outgoing)
+                raise
+        except Exception:
+            self.mirror.record_event(event_key=f"{outgoing_key}:failed", packet=updated,
+                                     event_type="delivery", delivery_state="failed", content=outgoing)
+            raise
+        self.mirror.record_event(event_key=f"{outgoing_key}:sent", packet=updated,
+                                 event_type="delivery", delivery_state="sent", content=outgoing)
+        self._processed.add(fingerprint)
 
-    def _fallback_content(self, user_prompt: str = "") -> str:
-        target_label = ROLE_TARGET_LABELS[self.role]
-        if self.role == "intake":
-            return (
-                "user_request: Fix a login validator so whitespace-only emails are rejected.\n"
-                "target_behavior: Reject blank or whitespace-only email values while preserving valid email acceptance.\n"
-                "suspected_area: demo_repo/auth.py\n"
-                "constraints: Keep the patch scoped to the validator behavior and do not claim real mutation.\n"
-                "risk_level: medium\n"
-                "missing_information: none\n"
-                "ready_for_planning: true\n"
-                f"handoff_to: {target_label}"
-            )
-        if self.role == "planner":
-            return (
-                "what_wrong: The login validator accepts whitespace-only input because the request has not been scoped into a bounded patch yet.\n"
-                "why_it_matters: Without scoped files and success criteria, an implementation agent can change unrelated code or overclaim readiness.\n"
-                "how_to_fix: Limit the change to demo_repo/auth.py and require whitespace-only emails to be rejected while normal emails still pass.\n"
-                "scoped_files: [demo_repo/auth.py]\n"
-                "success_criteria: [rejects_blank_email, rejects_whitespace_email, accepts_normal_email, scope_limited_to_auth_py]\n"
-                f"handoff_to: {target_label}"
-            )
-        if self.role == "engineer":
-            return (
-                "what_wrong: demo_repo/auth.py currently checks only for an at sign.\n"
-                "why_it_matters: Whitespace-only or malformed identity input can move downstream as if validation succeeded.\n"
-                "how_to_fix: Strip the value, reject empty strings, and keep the at-sign check.\n"
-                "simulated_diff: --- demo_repo/auth.py.before\\n+++ demo_repo/auth.py.after\\n@@\\n def is_valid_email(value):\\n-    return \"@\" in value\\n+    value = value.strip()\\n+    return bool(value) and \"@\" in value\n"
-                f"handoff_to: {target_label}"
-            )
-        if self.role == "tester":
-            return (
-                "what_wrong: Patch readiness needs behavior and scope validation before review.\n"
-                "why_it_matters: A diff alone does not prove the requested failure mode was resolved.\n"
-                "how_to_fix: Validate whitespace rejection, normal email acceptance, and single-file scope.\n"
-                "validation_summary: {all_tests_passed: true, scope_ok: true, tests_run: [rejects_blank_email, rejects_whitespace_email, accepts_normal_email, scope_limited_to_auth_py]}\n"
-                f"handoff_to: {target_label}"
-            )
-        if self.role == "issue-isolator":
-            return (
-                "what_failed: Validation or scope evidence is not sufficient for human apply.\n"
-                "why_blocked: ProofGate cannot mark a change safe until failed checks are isolated and retry guidance is clear.\n"
-                "suspected_cause: The patch, validation summary, or scoped_files evidence does not satisfy the reviewer gate.\n"
-                "retry_instruction: Send a focused correction back to Engineer with the exact failed check and required evidence.\n"
-                "evidence_needed: updated simulated_diff, validation_summary, and scope confirmation.\n"
-                "safe_to_apply: false\n"
-                "human_action: retry_or_reject\n"
-                f"handoff_to: {target_label}"
-            )
-        if self.role == "reviewer" and _contains_blocked_signal(user_prompt):
-            return (
-                "what_wrong: The proposed change is not ready for human apply because validation or scope evidence failed.\n"
-                "why_it_matters: ProofGate must not present unsafe or unresolved agent output as apply-ready work.\n"
-                "how_to_fix: Retry with a focused patch that addresses the isolated failed check and provide updated validation evidence.\n"
-                "validation_summary: {all_tests_passed: false, scope_ok: uncertainty}\n"
-                "safe_to_apply: false\n"
-                "human_action: retry_or_reject\n"
-                "decision_reason: Issue isolation reported a blocked apply condition, so Reviewer cannot approve the change.\n"
-                f"handoff_to: {target_label}"
-            )
-        return (
-            "what_wrong: The original validator accepts invalid whitespace-only identity input.\n"
-            "why_it_matters: Bad identity input can pass into login and account flows.\n"
-            "how_to_fix: Strip the value, reject empty strings, and keep the existing at-sign check inside demo_repo/auth.py.\n"
-            "simulated_diff: --- demo_repo/auth.py.before\\n+++ demo_repo/auth.py.after\\n@@\\n def is_valid_email(value):\\n-    return \"@\" in value\\n+    value = value.strip()\\n+    return bool(value) and \"@\" in value\n"
-            "validation_summary: {all_tests_passed: true, scope_ok: true}\n"
-            "safe_to_apply: true\n"
-            "human_action: approve_or_reject\n"
-            "decision_reason: The simulated patch is scoped and validation passed.\n"
-            f"handoff_to: {target_label}"
+    async def _produce_result(self, packet: dict[str, Any]) -> dict[str, Any]:
+        if self.llm_client is None:
+            return fallback_result(self.role, packet)
+        prompt = (
+            f"Act as ProofGate role {self.role}. Return JSON only: one stage_results object. "
+            "Every field in proofgate.band.v1 is mandatory. Tool delivery is not role success. "
+            f"Input packet: {json.dumps(packet)}"
         )
+        try:
+            response = await self.llm_client.chat.completions.create(
+                model=self.model, temperature=0, max_tokens=4096,
+                messages=[{"role": "system", "content": prompt}])
+            content = response.choices[0].message.content
+            result = json.loads(content)
+            result.setdefault("evidence", []).append({"source": "model", "label": "provider_generated"})
+            validate_stage_result(result)
+            return result
+        except Exception as exc:
+            result = fallback_result(self.role, packet)
+            result["evidence"].append({"source": "fallback", "label": "fallback_generated", "reason": type(exc).__name__})
+            return result
 
 
-def _contains_blocked_signal(value: str) -> bool:
-    normalized = value.lower()
-    markers = [
-        "safe_to_apply: false",
-        "human_action: retry_or_reject",
-        "what_failed:",
-        "why_blocked:",
-        "validation failed",
-        "failed_check",
-        "still passed validation",
-    ]
-    return any(marker in normalized for marker in markers)
+def fallback_result(role: str, packet: dict[str, Any]) -> dict[str, Any]:
+    prior = packet["stage_results"]
+    if role == "intake":
+        return stage_result(role, output={"objective": packet["objective"], "constraints": packet["constraints"]},
+                            criteria=["objective captured", "constraints captured"], met=["objective captured", "constraints captured"],
+                            role_success="Intake converted the human request into a complete bounded task.")
+    if role == "planner":
+        return stage_result(role, output={"requirements": [packet["objective"]], "risks": []},
+                            criteria=["requirements measurable", "scope bounded"], met=["requirements measurable", "scope bounded"],
+                            role_success="Plan defined measurable requirements, scope, and risks.")
+    if role == "resolution":
+        isolation = next((item for item in reversed(prior) if item["stage"] == "issue-isolator"), None)
+        met = isolation is not None or not any("force_failure" in str(value) for value in packet["constraints"])
+        return stage_result(role, output={"solution": "Structured resolution produced.", "retry_context": isolation},
+                            criteria=["solution addresses objective"], met=["solution addresses objective"] if met else [],
+                            requirements_met=met, unmet_requirements=[] if met else ["solution addresses objective"],
+                            role_success="Resolution produced a solution and assessed every requirement.")
+    if role == "issue-isolator":
+        failed = next(item for item in reversed(prior) if item["stage"] == "resolution")
+        return stage_result(role, output={"recovery": "Address the failed requirement and reassess it."},
+                            criteria=["failure explained", "retry actionable"], met=["failure explained", "retry actionable"],
+                            role_success="Issue Isolation explained the failure and supplied a focused retry.",
+                            failed_stage="resolution", failed_requirement=failed["unmet_requirements"],
+                            failure_point="requirement assessment", failure_reason="Resolution reported requirements_met=false.",
+                            why_it_matters="Finalizing cannot claim completion with unmet requirements.",
+                            missing_information=failed["unmet_requirements"], how_to_overcome="Correct the unmet requirement and provide evidence.",
+                            what_success_looks_like="Retry reports requirements_met=true with evidence.",
+                            retry_instruction="Retry Resolution once using this isolation context.", failed_resolution=failed)
+    if role == "finalizing":
+        resolution = next(item for item in reversed(prior) if item["stage"] == "resolution")
+        isolated = any(item["stage"] == "issue-isolator" for item in prior)
+        met = bool(resolution["requirements_met"])
+        outcome = "resolved_after_isolation" if met and isolated else "completed" if met else "blocked"
+        successes = {item["stage"]: item["role_success"] for item in prior}
+        final = {"outcome": outcome, "objective": packet["objective"], "role_successes": successes,
+                 "final_summary": "Workflow finalized from structured Band context.", "resolution": resolution["output"],
+                 "evidence": [item["evidence"] for item in prior],
+                 "isolation_summary": next((item["output"] for item in prior if item["stage"] == "issue-isolator"), None),
+                 "requirements_met": met, "unresolved_items": resolution["unmet_requirements"],
+                 "remaining_uncertainty": resolution["remaining_uncertainty"],
+                 "recommended_next_step": "Use the final result; no user workflow decision is required."}
+        return stage_result(role, output=final, criteria=["all roles represented", "terminal outcome assigned"],
+                            met=["all roles represented", "terminal outcome assigned"],
+                            role_success="Finalizing synthesized the terminal result and all role contributions.")
+    raise ValueError(role)
 
 
 async def run_remote_agent(role: str) -> None:
@@ -296,75 +163,38 @@ async def run_remote_agent(role: str) -> None:
         from dotenv import load_dotenv
         from openai import AsyncOpenAI
     except ImportError as exc:
-        raise SystemExit(
-            "Missing live Band dependencies. Install with: "
-            "python -m pip install band-sdk openai python-dotenv"
-        ) from exc
-
-    if role not in ROLE_NOTES:
-        roles = ", ".join(sorted(ROLE_NOTES))
-        raise SystemExit(f"Unknown role {role!r}. Expected one of: {roles}")
-
-    load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
+        raise SystemExit("Missing live dependencies: band-sdk openai python-dotenv") from exc
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     agent_id, api_key = load_agent_config(role)
-    llm_api_key = os.getenv("FEATHERLESS_API_KEY") or os.getenv("OPENAI_API_KEY")
-    llm_base_url = os.getenv("OPENAI_BASE_URL", "https://api.featherless.ai/v1")
-    llm_model = os.getenv("OPENAI_MODEL", "openai/gpt-oss-20b")
-    llm_client = AsyncOpenAI(base_url=llm_base_url, api_key=llm_api_key) if llm_api_key else None
-    adapter = ProofGateDirectAdapter(role=role, llm_client=llm_client, model=llm_model)
-    agent = Agent.create(adapter=adapter, agent_id=agent_id, api_key=api_key)
-    print(f"ProofGate {role} agent is running. Press Ctrl+C to stop.")
-    print(f"Role note: {ROLE_NOTES[role]}")
-    await agent.run()
+    key = os.getenv("FEATHERLESS_API_KEY") or os.getenv("OPENAI_API_KEY")
+    client = AsyncOpenAI(base_url=os.getenv("OPENAI_BASE_URL", "https://api.featherless.ai/v1"), api_key=key) if key else None
+    adapter = ProofGateDirectAdapter(role=role, llm_client=client, model=os.getenv("OPENAI_MODEL", "openai/gpt-oss-20b"))
+    await Agent.create(adapter=adapter, agent_id=agent_id, api_key=api_key).run()
 
 
 async def run_remote_agent_forever(role: str) -> None:
     while True:
         try:
             await run_remote_agent(role)
-        except KeyboardInterrupt:
-            return
-        except asyncio.CancelledError:
+        except (KeyboardInterrupt, asyncio.CancelledError):
             return
         except Exception as exc:
-            print(f"ProofGate {role} agent disconnected: {_safe_error_summary(exc)}. Reconnecting in {RECONNECT_DELAY_SECONDS:g}s.")
-            try:
-                await asyncio.sleep(RECONNECT_DELAY_SECONDS)
-            except (KeyboardInterrupt, asyncio.CancelledError):
-                return
+            print(f"ProofGate {role} disconnected: {_safe_error(exc)}", flush=True)
+            await asyncio.sleep(RECONNECT_DELAY_SECONDS)
 
 
-def _safe_error_summary(exc: Exception) -> str:
-    reason = " ".join(str(exc).split())
-    if reason:
-        reason = re.sub(r"band_[au]_[A-Za-z0-9_-]+", "<redacted>", reason)
-        reason = re.sub(r"rc_[A-Za-z0-9_-]+", "<redacted>", reason)
-        return f"{type(exc).__name__}: {reason}"
-    return type(exc).__name__
+def _safe_error(exc: Exception) -> str:
+    return re.sub(r"(band_[au]_|rc_)[A-Za-z0-9_-]+", "<redacted>", f"{type(exc).__name__}: {exc}")
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run one live ProofGate Band remote agent.")
-    parser.add_argument(
-        "--no-reconnect",
-        action="store_true",
-        help="Run once and exit if the Band SDK connection closes.",
-    )
-    parser.add_argument("role", choices=sorted(ROLE_NOTES))
+    parser = argparse.ArgumentParser(description="Run one ProofGate Band agent.")
+    parser.add_argument("--no-reconnect", action="store_true")
+    parser.add_argument("role", choices=ROLES)
     args = parser.parse_args()
-    runner = run_remote_agent if args.no_reconnect else run_remote_agent_forever
-    try:
-        asyncio.run(runner(args.role))
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        print(f"ProofGate {args.role} agent stopped.")
-    except Exception as exc:
-        print(f"ProofGate {args.role} agent failed: {_safe_error_summary(exc)}")
-        return 1
+    asyncio.run((run_remote_agent if args.no_reconnect else run_remote_agent_forever)(args.role))
     return 0
 
 
 if __name__ == "__main__":
-    try:
-        raise SystemExit(main())
-    except KeyboardInterrupt:
-        raise SystemExit(0)
+    raise SystemExit(main())

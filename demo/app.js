@@ -1,340 +1,370 @@
-/**
- * ProofGate for Band — Dashboard Frontend
- * 
- * Wire flow:
- *   1. On load: GET /api/health -> badge status
- *   2. "Run Live Demo" click: POST /api/run -> job_id
- *   3. Poll GET /api/jobs/<job_id> every 1.5s until completed/failed
- *   4. GET /api/results/<job_id> -> render all panels
- * 
- * No silent live-data fallback. Errors are always visible.
- */
+/** ProofGate for Band — direct submission and live workflow processing. */
 
-const API_BASE = '';
+const WORKFLOW_STAGES = [
+  { key: 'intake', label: 'Intake', responsibility: 'Bound the request and preserve its constraints.' },
+  { key: 'planner', label: 'Plan', responsibility: 'Define measurable requirements, scope, and risks.' },
+  { key: 'resolution', label: 'Resolution', responsibility: 'Produce and assess the proposed solution.' },
+  { key: 'issue-isolator', label: 'Issue Isolation', responsibility: 'Explain a failed attempt and focus recovery.', optional: true },
+  { key: 'resolution-retry', label: 'Resolution Retry', responsibility: 'Retry once using the isolation evidence.', optional: true },
+  { key: 'finalizing', label: 'Finalizing', responsibility: 'Deliver one terminal result with evidence.' },
+];
 
-// State
-let jobId = null;
-let polling = false;
+const COMMANDS = [
+  { id: 'fix', label: 'Fix', template: 'Fix the following issue: [describe the problem and target file].' },
+  { id: 'review', label: 'Review', template: 'Review the following target: [target file or path]. Focus on: [what to look for].' },
+];
 
-// DOM refs
-const $ = (id) => document.getElementById(id);
-const healthBadge  = $('health-badge');
-const runBtn       = $('run-btn');
-const jobIdDisplay = $('job-id-display');
+let selectedRun = null;
+let pollTimer = null;
+let runtimeOn = false;
+let readiness = { send_enabled: false };
+let submissionPending = false;
+let activeObjective = '';
+let activeRunId = '';
+let lastSequence = 0;
 
-const progressSection = $('progress-section');
-const progressFill    = $('progress-fill');
-const progressStep    = $('progress-step');
+document.addEventListener('DOMContentLoaded', async () => {
+  renderCommands();
+  initTextarea();
+  initActions();
+  initRuntime();
+  renderWorkflow();
+  await Promise.all([loadTestInputs(), checkStatus()]);
+});
 
-const resultsSection = $('results-section');
-
-const scenarioCard        = $('scenario-card');
-const successPathCard     = $('success-path-card');
-const failurePathCard     = $('failure-path-card');
-const proofPacketCard     = $('proof-packet-card');
-const failureProofCard    = $('failure-proof-card');
-const transcriptCard      = $('transcript-card');
-const testCasesCard       = $('test-cases-card');
-const artifactCard        = $('artifact-card');
-
-const errorDisplay = $('error-display');
-const errorText    = $('error-text');
-
-// Helpers
-function show(el)  { el.classList.remove('hidden'); }
-function hide(el)  { el.classList.add('hidden'); }
-
-function escapeHtml(text) {
-  const d = document.createElement('div');
-  d.textContent = text;
-  return d.innerHTML;
+function renderCommands() {
+  const grid = document.getElementById('command-grid');
+  grid.innerHTML = COMMANDS.map(command =>
+    `<button class="cmd-btn" data-cmd="${command.id}">${command.label}</button>`
+  ).join('');
+  grid.addEventListener('click', event => {
+    const button = event.target.closest('.cmd-btn');
+    if (!button) return;
+    const command = COMMANDS.find(item => item.id === button.dataset.cmd);
+    if (!command) return;
+    const input = document.getElementById('chat-input');
+    input.value = command.template;
+    input.focus();
+    updatePreview();
+    updateSendState();
+  });
 }
 
-function showError(msg) {
-  errorText.textContent = msg;
-  show(errorDisplay);
-}
-
-function hideError() {
-  hide(errorDisplay);
-}
-
-// Health Check
-async function checkHealth() {
+async function loadTestInputs() {
+  const container = document.getElementById('test-input-list');
   try {
-    const res = await fetch(`${API_BASE}/api/health`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (data.status === 'ok') {
-      healthBadge.className = 'badge badge-ok';
-      healthBadge.textContent = 'Backend Connected';
-      runBtn.disabled = false;
-    } else {
-      throw new Error('Unexpected response');
+    const response = await fetch('/internal/test-inputs');
+    const data = response.ok ? await response.json() : { items: [] };
+    if (!data.items?.length) {
+      container.innerHTML = '<span class="op-empty">No test inputs</span>';
+      return;
     }
-  } catch (err) {
-    healthBadge.className = 'badge badge-fail';
-    healthBadge.textContent = 'Demo Fallback';
-    // Button stays disabled, show fallback note
-    showError(
-      'Backend unreachable. Start the server with:\n' +
-      '  python -m proofgate.server --host 127.0.0.1 --port 8787\n' +
-      'Then refresh this page.'
-    );
+    container.innerHTML = data.items.map(item =>
+      `<button class="test-input-item" data-request="${esc(item.request_text)}">
+        <span class="ti-label">${esc(item.label)}</span>
+        <span class="ti-meta">${esc(item.expected_outcome)}</span>
+      </button>`
+    ).join('');
+    container.querySelectorAll('.test-input-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const input = document.getElementById('chat-input');
+        input.value = item.dataset.request;
+        input.focus();
+        updatePreview();
+        updateSendState();
+      });
+    });
+  } catch (_error) {
+    container.innerHTML = '<span class="op-empty">Test inputs unavailable</span>';
   }
 }
 
-// Run Live Demo
-async function runLiveDemo() {
-  hideError();
-  runBtn.disabled = true;
-  runBtn.innerHTML = '<span class="btn-icon">▶</span> Starting…';
+function initTextarea() {
+  document.getElementById('chat-input').addEventListener('input', () => {
+    updatePreview();
+    updateSendState();
+  });
+}
 
+function updatePreview() {
+  const text = document.getElementById('chat-input').value.trim();
+  document.getElementById('routing-preview').innerHTML = text
+    ? `<span class="preview-label">Direct route:</span> <code class="preview-content">UI → Band → @itz1508/intake</code>`
+    : '';
+}
+
+function updateSendState() {
+  const button = document.getElementById('chat-send');
+  const hasText = Boolean(document.getElementById('chat-input').value.trim());
+  button.disabled = !hasText || !readiness.send_enabled || submissionPending;
+}
+
+function initActions() {
+  document.getElementById('chat-send').addEventListener('click', sendToBand);
+  document.getElementById('chat-open-room').addEventListener('click', openRoom);
+}
+
+async function sendToBand() {
+  if (submissionPending) return;
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  submissionPending = true;
+  activeObjective = text;
+  activeRunId = '';
+  lastSequence = 0;
+  selectedRun = null;
+  setSubmissionStatus('sending', 'Sending directly to Intake through Band…');
+  resetProcessingView();
+  updateSendState();
+
+  const requestId = globalThis.crypto?.randomUUID?.() || `request-${Date.now()}`;
   try {
-    const res = await fetch(`${API_BASE}/api/run`, {
+    const response = await fetch('/internal/chat/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: 'Fix login validator',
-        mode: 'success'
-      }),
+      body: JSON.stringify({ text, client_request_id: requestId }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-    jobId = data.job_id;
-
-    jobIdDisplay.textContent = `Job ID: ${jobId}`;
-    show(jobIdDisplay);
-    show(progressSection);
-    runBtn.textContent = '⏳ Running…';
-
-    await pollJob(jobId);
-  } catch (err) {
-    showError(`Failed to start job: ${err.message}`);
-    runBtn.disabled = false;
-    runBtn.innerHTML = '<span class="btn-icon">▶</span> Run Live Demo';
-  }
-}
-
-// Poll job status
-async function pollJob(id) {
-  polling = true;
-  let done = false;
-
-  while (polling && !done) {
-    await sleep(1500); // 1.5s interval
-
-    try {
-      const res = await fetch(`${API_BASE}/api/jobs/${id}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          showError('Job not found on server. It may have expired.');
-          break;
-        }
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-
-      // Update progress
-      progressFill.style.width = `${data.progress}%`;
-      progressStep.textContent = data.current_step || data.status;
-
-      if (data.status === 'completed') {
-        done = true;
-        runBtn.textContent = '✓ Complete';
-        await fetchResults(id);
-      } else if (data.status === 'failed') {
-        done = true;
-        showError(`Job failed: ${data.error || 'Unknown error'}`);
-        runBtn.textContent = '✗ Failed';
-        runBtn.disabled = false;
-      }
-    } catch (err) {
-      showError(`Polling error: ${err.message}`);
-      polling = false;
-      runBtn.disabled = false;
-      runBtn.innerHTML = '<span class="btn-icon">▶</span> Retry';
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail?.message || 'Band rejected the request.');
     }
+    setSubmissionStatus('sent', `Submitted → ${data.routed_to}. Waiting for Intake…`);
+    document.getElementById('chat-input').disabled = true;
+    startMirrorPolling();
+  } catch (error) {
+    submissionPending = false;
+    setSubmissionStatus('error', error.message || 'Unable to send to Band.');
+    updateSendState();
   }
 }
 
-// Fetch & render results
-async function fetchResults(id) {
+function setSubmissionStatus(state, message) {
+  const element = document.getElementById('submission-status');
+  element.className = `submission-status status-${state}`;
+  element.textContent = message;
+}
+
+function openRoom() {
+  const button = document.getElementById('chat-open-room');
+  window.open(button.dataset.url || 'https://app.band.ai', '_blank', 'noopener');
+}
+
+function initRuntime() {
+  document.getElementById('runtime-btn').addEventListener('click', toggleRuntime);
+}
+
+async function toggleRuntime() {
+  const button = document.getElementById('runtime-btn');
+  button.disabled = true;
+  button.textContent = '…';
   try {
-    const res = await fetch(`${API_BASE}/api/results/${id}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    const data = await res.json();
-
-    renderResults(data);
-    show(resultsSection);
-    hide(progressSection);
-  } catch (err) {
-    showError(`Failed to fetch results: ${err.message}`);
+    const action = runtimeOn ? 'stop' : 'start';
+    const response = await fetch(`/internal/runtime/${action}`, { method: 'POST' });
+    if (!response.ok) throw new Error('Runtime action failed');
+    await checkStatus();
+  } catch (_error) {
+    setSubmissionStatus('error', 'Agent runtime could not be changed.');
   } finally {
-    polling = false;
-    runBtn.disabled = false;
+    button.disabled = false;
   }
 }
 
-// Render all result panels
-function renderResults(data) {
-  // Scenario
-  if (data.demo_scenario) {
-    const s = data.demo_scenario;
-    scenarioCard.innerHTML = `
-      <h4 class="card-title">Scenario: ${escapeHtml(s.title)}</h4>
-      <div class="proof-field">
-        <div class="proof-field-label">Problem</div>
-        <div class="proof-field-value">${escapeHtml(s.problem)}</div>
-      </div>
-      <div class="proof-field">
-        <div class="proof-field-label">Fix</div>
-        <div class="proof-field-value">${escapeHtml(s.fix)}</div>
-      </div>
-      <div class="proof-field">
-        <div class="proof-field-label">Coverage</div>
-        <div class="proof-field-value">${escapeHtml(s.coverage)}</div>
-      </div>
-    `;
-    show(scenarioCard);
-  }
+async function checkStatus() {
+  try {
+    const [statusResponse, runtimeResponse] = await Promise.all([
+      fetch('/internal/chat/status'),
+      fetch('/internal/runtime/status'),
+    ]);
+    if (!statusResponse.ok || !runtimeResponse.ok) throw new Error('Status unavailable');
+    readiness = await statusResponse.json();
+    const runtime = await runtimeResponse.json();
+    runtimeOn = Boolean(runtime.all_running);
 
-  // Success path
-  if (data.success_path && data.success_path.length) {
-    successPathCard.querySelector('#success-agents').innerHTML =
-      data.success_path.map(a => `
-        <div class="agent-step">
-          <div class="agent-step-header">
-            <span class="icon-ok">✓</span>
-            <span class="agent-step-name">${escapeHtml(a.name)}</span>
-            <span class="agent-step-agent">${escapeHtml(a.agent)}</span>
-          </div>
-          <div class="agent-step-role">${escapeHtml(a.role)}</div>
-          <div class="agent-step-desc">${escapeHtml(a.description)}</div>
-        </div>
-      `).join('');
-    show(successPathCard);
-  }
+    document.getElementById('st-entry-mode').textContent = 'Direct Band';
+    document.getElementById('st-runtime').textContent = runtimeOn ? 'On (5/5)' : `${readiness.agents_running || 0}/5 running`;
+    document.getElementById('st-room').textContent = readiness.room_selected ? 'Ready' : 'Unavailable';
+    document.getElementById('st-intake').textContent = readiness.intake_handle || '@itz1508/intake';
+    document.getElementById('st-run').textContent = readiness.active_run_id || activeRunId || 'None';
+    if (readiness.room_url) document.getElementById('chat-open-room').dataset.url = readiness.room_url;
 
-  // Failure path
-  if (data.failure_path && data.failure_path.length) {
-    failurePathCard.querySelector('#failure-agents').innerHTML =
-      data.failure_path.map(a => `
-        <div class="agent-step">
-          <div class="agent-step-header">
-            <span class="icon-fail">✗</span>
-            <span class="agent-step-name">${escapeHtml(a.name)}</span>
-            <span class="agent-step-agent">${escapeHtml(a.agent)}</span>
-          </div>
-          <div class="agent-step-role">${escapeHtml(a.role)}</div>
-          <div class="agent-step-desc">${escapeHtml(a.description)}</div>
-        </div>
-      `).join('');
-    show(failurePathCard);
-  }
+    const runtimeButton = document.getElementById('runtime-btn');
+    runtimeButton.textContent = runtimeOn ? 'ON' : 'OFF';
+    runtimeButton.classList.toggle('on', runtimeOn);
+    document.getElementById('runtime-roles').innerHTML = (runtime.agents || []).map(agent =>
+      `<div class="runtime-role-row"><span class="role-name">${esc(agent.role)}</span><span class="${agent.running ? 'status-running' : 'status-stopped'}">${agent.running ? 'Running' : 'Stopped'}</span></div>`
+    ).join('');
 
-  // Proof packets
-  if (data.proof_packet) {
-    renderProofPacket('proof-packet-content', data.proof_packet);
-    show(proofPacketCard);
+    if (!submissionPending) {
+      setSubmissionStatus(readiness.send_enabled ? 'ready' : 'idle', readiness.send_enabled ? 'Ready for direct Band submission.' : (readiness.error || 'Workflow is not ready.'));
+    }
+  } catch (_error) {
+    readiness = { send_enabled: false };
+    setSubmissionStatus('error', 'Backend status is unavailable.');
   }
-  if (data.failure_proof_packet) {
-    renderProofPacket('failure-proof-content', data.failure_proof_packet);
-    show(failureProofCard);
-  }
+  updateSendState();
+}
 
-  // Transcript
-  if (data.transcript && data.transcript.length) {
-    $('transcript-messages').innerHTML =
-      data.transcript.map(m => `
-        <div class="msg">
-          <div class="msg-header">
-            <span class="msg-agent">${escapeHtml(m.agent)}</span>
-            <span class="msg-handle">${escapeHtml(m.handle)}</span>
-            <span class="msg-time">${escapeHtml(m.timestamp)}</span>
-          </div>
-          <div class="msg-text">${escapeHtml(m.message)}</div>
-        </div>
-      `).join('');
-    show(transcriptCard);
-  }
+function startMirrorPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollWorkflow();
+  pollTimer = setInterval(pollWorkflow, 1200);
+}
 
-  // Test cases
-  if (data.test_cases && data.test_cases.length) {
-    $('test-body').innerHTML =
-      data.test_cases.map(t => `
-        <tr>
-          <td>${escapeHtml(t.name)}</td>
-          <td>${escapeHtml(String(t.input))}</td>
-          <td>${escapeHtml(String(t.expected))}</td>
-          <td>${t.passed ? '✅ PASS' : '❌ FAIL'}</td>
-        </tr>
-      `).join('');
-    show(testCasesCard);
-  }
+async function pollWorkflow() {
+  try {
+    const query = activeRunId
+      ? `run_id=${encodeURIComponent(activeRunId)}&after_sequence=${lastSequence}`
+      : `after_sequence=0`;
+    const response = await fetch(`/internal/chat/events?${query}`);
+    if (!response.ok) return;
+    const eventData = await response.json();
+    if (!eventData.run_id) return;
 
-  // Artifact
-  if (data.artifact) {
-    $('artifact-diff').textContent = data.artifact.diff || '(no diff)';
-    $('artifact-summary').textContent = data.artifact.summary || '';
-    show(artifactCard);
+    const runResponse = await fetch(`/internal/chat/runs/${encodeURIComponent(eventData.run_id)}`);
+    if (!runResponse.ok) return;
+    const run = await runResponse.json();
+    if (!activeRunId && !objectiveMatches(run.objective, activeObjective)) return;
+
+    activeRunId = eventData.run_id;
+    selectedRun = run;
+    lastSequence = eventData.next_sequence || lastSequence;
+    document.getElementById('st-run').textContent = activeRunId;
+    renderRun();
+
+    if (run.terminal) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      submissionPending = false;
+      setSubmissionStatus('complete', `Finalizing delivered: ${run.outcome}`);
+      document.getElementById('chat-input').disabled = false;
+      updateSendState();
+    } else {
+      setSubmissionStatus('processing', `Processing → ${currentStageLabel(run)}`);
+    }
+  } catch (_error) {
+    setSubmissionStatus('error', 'Workflow polling was interrupted; retrying…');
   }
 }
 
-function renderProofPacket(containerId, packet) {
-  const safeClass = packet.safe_to_apply ? 'proof-safe-true' : 'proof-safe-false';
-  const container = $(containerId);
-  container.innerHTML = `
-    <div class="proof-field">
-      <div class="proof-field-label">Title</div>
-      <div class="proof-field-value">${escapeHtml(packet.title)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Status</div>
-      <div class="proof-field-value">${escapeHtml(packet.status)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">What's Wrong</div>
-      <div class="proof-field-value">${escapeHtml(packet.what_wrong)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Why It Matters</div>
-      <div class="proof-field-value">${escapeHtml(packet.why_it_matters)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">How to Fix</div>
-      <div class="proof-field-value">${escapeHtml(packet.how_to_fix)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Simulated Diff</div>
-      <pre class="proof-diff">${escapeHtml(packet.simulated_diff)}</pre>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Validation Summary</div>
-      <div class="proof-field-value">${escapeHtml(packet.validation_summary)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Safe to Apply</div>
-      <div class="proof-field-value ${safeClass}">${String(packet.safe_to_apply)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Human Action</div>
-      <div class="proof-field-value">${escapeHtml(packet.human_action)}</div>
-    </div>
-    <div class="proof-field">
-      <div class="proof-field-label">Decision Reason</div>
-      <div class="proof-field-value">${escapeHtml(packet.decision_reason)}</div>
-    </div>
-  `;
+function objectiveMatches(actual, expected) {
+  const normalizedActual = String(actual || '').replace(/^@?itz1508\/intake\s*/i, '').trim();
+  return normalizedActual === expected.trim() || normalizedActual.includes(expected.trim());
 }
 
-// Utility
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function currentStageLabel(run) {
+  const path = run.workflow_path || [];
+  const key = path[path.length - 1] || 'intake';
+  return WORKFLOW_STAGES.find(stage => stage.key === key)?.label || key;
 }
 
-// Init
-document.addEventListener('DOMContentLoaded', () => {
-  checkHealth();
-  runBtn.addEventListener('click', runLiveDemo);
-});
+function resetProcessingView() {
+  document.getElementById('result-card').innerHTML = '<p class="result-pending">Waiting for Finalizing to deliver the terminal result.</p>';
+  document.getElementById('terminal-body').innerHTML = '<p class="terminal-pending">Request submitted. Waiting for Intake delivery…</p>';
+  document.getElementById('artifact-tabs').innerHTML = '';
+  document.getElementById('artifact-content').innerHTML = '<p class="artifact-pending">Stage outputs appear as participants complete.</p>';
+  renderWorkflow();
+}
+
+function renderRun() {
+  renderWorkflow();
+  renderResult();
+  renderConversation();
+  renderArtifacts();
+}
+
+function stageState(stage) {
+  if (!selectedRun) return stage.key === 'intake' && submissionPending ? 'processing' : 'waiting';
+  const results = selectedRun.stage_results || {};
+  if (results[stage.key]) return results[stage.key].role_success ? 'delivered' : 'failed';
+  const path = selectedRun.workflow_path || [];
+  if (stage.optional && selectedRun.terminal) return 'skipped';
+  const current = path[path.length - 1];
+  if (current === stage.key) return 'processing';
+  if (stage.key === 'finalizing' && selectedRun.outcome) return 'delivered';
+  return 'waiting';
+}
+
+function renderWorkflow() {
+  const container = document.getElementById('workflow-steps-container');
+  const results = selectedRun?.stage_results || {};
+  container.innerHTML = `<div class="workflow-grid">${WORKFLOW_STAGES.map((stage, index) => {
+    const state = stageState(stage);
+    const result = results[stage.key] || {};
+    const unmet = result.unmet_requirements || [];
+    const evidence = result.evidence || [];
+    const output = result.output || {};
+    const summary = result.role_success || output.summary || output.solution || output.final_summary || stage.responsibility;
+    return `<article class="workflow-card stage-${state}">
+      <div class="workflow-card-head"><span class="stage-index">${String(index + 1).padStart(2, '0')}</span><h3>${stage.label}</h3><span class="stage-state">${state}</span></div>
+      <p>${esc(summary)}</p>
+      ${evidence.length ? `<div class="stage-meta">Evidence: ${esc(evidence.length)} item${evidence.length === 1 ? '' : 's'}</div>` : ''}
+      ${unmet.length ? `<div class="stage-unmet">Unmet: ${esc(unmet.join(', '))}</div>` : ''}
+    </article>`;
+  }).join('')}</div>`;
+  const note = document.getElementById('workflow-note');
+  note.textContent = selectedRun?.terminal
+    ? `Terminal delivery completed with outcome: ${selectedRun.outcome}`
+    : 'Band advances each structured packet automatically. One isolation-guided retry is available.';
+}
+
+function renderResult() {
+  const element = document.getElementById('result-card');
+  const final = selectedRun?.final_result || {};
+  if (!selectedRun?.outcome) {
+    element.innerHTML = `<p class="result-pending">Workflow processing. Current stage: ${esc(currentStageLabel(selectedRun || {}))}</p>`;
+    return;
+  }
+  const unresolved = final.unresolved_items || [];
+  const uncertainty = final.remaining_uncertainty || [];
+  const contributions = final.role_successes || {};
+  element.innerHTML = `
+    <div class="result-outcome"><span class="outcome-badge outcome-${esc(selectedRun.outcome)}">${esc(selectedRun.outcome)}</span></div>
+    <p class="result-summary">${esc(final.final_summary || 'Finalizing delivered the terminal result.')}</p>
+    <dl class="field-list">
+      <dt>Resolution</dt><dd>${esc(valueSummary(final.resolution) || '—')}</dd>
+      <dt>Requirements met</dt><dd>${final.requirements_met === true ? 'Yes' : 'No'}</dd>
+      <dt>Retry count</dt><dd>${esc(selectedRun.retry_count)}</dd>
+      <dt>Unresolved</dt><dd>${esc(unresolved.join(', ') || 'None')}</dd>
+      <dt>Uncertainty</dt><dd>${esc(Array.isArray(uncertainty) ? uncertainty.join(', ') || 'None' : uncertainty || 'None')}</dd>
+    </dl>
+    <div class="contribution-grid">${Object.entries(contributions).map(([role, value]) => `<div><strong>${esc(role)}</strong><span>${esc(value)}</span></div>`).join('')}</div>
+    <details class="result-detail"><summary>Structured final result</summary><pre class="json-block">${esc(JSON.stringify(final, null, 2))}</pre></details>`;
+}
+
+function valueSummary(value) {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return '';
+  return value.solution || value.summary || value.final_summary || JSON.stringify(value);
+}
+
+function renderConversation() {
+  const events = selectedRun?.conversation_events || [];
+  document.getElementById('terminal-title').textContent = `proofgate.band.v1 — ${selectedRun?.outcome || 'processing'}`;
+  document.getElementById('terminal-body').innerHTML = events.length
+    ? events.map(event => `<div class="term-line"><span class="term-sender">${esc(event.sender_role || 'human')}</span><span class="term-arrow">→</span><span class="term-receiver">${esc(event.recipient_role)}</span><span class="term-info">${esc(event.summary || event.event)}</span></div>`).join('')
+    : '<p class="terminal-pending">Waiting for the first mirrored Band event…</p>';
+}
+
+function renderArtifacts() {
+  const results = selectedRun?.stage_results || {};
+  const keys = Object.keys(results);
+  const tabs = document.getElementById('artifact-tabs');
+  const content = document.getElementById('artifact-content');
+  if (!keys.length) return;
+  tabs.innerHTML = keys.map((key, index) => `<button class="artifact-tab${index === 0 ? ' active' : ''}" data-tab="artifact-${key}">${esc(WORKFLOW_STAGES.find(stage => stage.key === key)?.label || key)}</button>`).join('');
+  content.innerHTML = keys.map((key, index) => `<pre id="artifact-${key}" class="artifact-block${index === 0 ? ' active' : ''}">${esc(JSON.stringify(results[key], null, 2))}</pre>`).join('');
+  tabs.querySelectorAll('.artifact-tab').forEach(tab => tab.addEventListener('click', () => {
+    tabs.querySelectorAll('.artifact-tab').forEach(item => item.classList.remove('active'));
+    content.querySelectorAll('.artifact-block').forEach(item => item.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab)?.classList.add('active');
+  }));
+}
+
+function esc(value) {
+  const element = document.createElement('span');
+  element.textContent = value == null ? '' : String(value);
+  return element.innerHTML;
+}
