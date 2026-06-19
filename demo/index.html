@@ -1,56 +1,127 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ProofGate for Band</title>
-    <link rel="stylesheet" href="styles.css">
-  </head>
-  <body>
-    <main class="shell">
-      <section class="hero">
-        <div>
-          <p class="eyebrow">Band of Agents Hackathon</p>
-          <h1>ProofGate</h1>
-          <p class="lede">A multi-agent control room for AI code changes. Planner, Engineer, Tester, and Reviewer agents coordinate through a Band-style room before a human can apply the change.</p>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ProofGate for Band — Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <h1 class="logo">ProofGate <span>for Band</span></h1>
+      <div class="badge-group">
+        <span id="health-badge" class="badge badge-pending">Checking backend…</span>
+        <span class="badge badge-sim">Simulated</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero -->
+    <section class="hero">
+      <h2>Multi-Agent Apply Gate for AI Code Changes</h2>
+      <p>
+        ProofGate lets six specialized <strong>Band</strong> agents coordinate
+        request intake, planning, patch proposal, testing, safety review, and
+        issue isolation — producing an auditable <strong>proof packet</strong>
+        at the <strong>human apply boundary</strong>.
+      </p>
+      <p class="hero-note">
+        This dashboard runs against a <strong>simulated Band runner</strong>.
+        Prepared for future live Band integration.
+      </p>
+      <div class="hero-actions">
+        <button id="run-btn" class="btn btn-primary" disabled>
+          <span class="btn-icon">▶</span> Run Live Demo
+        </button>
+      </div>
+      <div id="job-id-display" class="job-id-display hidden"></div>
+    </section>
+
+    <!-- Progress -->
+    <section id="progress-section" class="section hidden">
+      <h3>Agent Pipeline</h3>
+      <div class="progress-bar-track">
+        <div id="progress-fill" class="progress-bar-fill" style="width:0%"></div>
+      </div>
+      <p id="progress-step" class="progress-step">Initializing…</p>
+    </section>
+
+    <!-- Results -->
+    <section id="results-section" class="section hidden">
+      <h3>Results</h3>
+
+      <!-- Scenario -->
+      <div id="scenario-card" class="card card-scenario hidden"></div>
+
+      <!-- Agent paths -->
+      <div class="card-grid">
+        <div id="success-path-card" class="card hidden">
+          <h4 class="card-title card-title-green">Success Path</h4>
+          <div id="success-agents"></div>
         </div>
-        <div class="decision">
-          <span class="label">Decision</span>
-          <strong id="decision">Ready for human apply</strong>
-          <span id="reason">Patch stayed inside scope and validation passed.</span>
+        <div id="failure-path-card" class="card hidden">
+          <h4 class="card-title card-title-red">Failure Path</h4>
+          <div id="failure-agents"></div>
         </div>
-      </section>
+      </div>
 
-      <section class="grid">
-        <article class="panel room">
-          <h2>Band Room Transcript</h2>
-          <div id="messages" class="messages"></div>
-        </article>
+      <!-- Proof Packets -->
+      <div class="card-grid">
+        <div id="proof-packet-card" class="card card-success hidden">
+          <h4 class="card-title card-title-green">Proof Packet — Success</h4>
+          <div id="proof-packet-content"></div>
+        </div>
+        <div id="failure-proof-card" class="card card-danger hidden">
+          <h4 class="card-title card-title-red">Proof Packet — Failure</h4>
+          <div id="failure-proof-content"></div>
+        </div>
+      </div>
 
-        <article class="panel">
-          <h2>Proof Packet</h2>
-          <dl class="packet">
-            <dt>What is wrong</dt>
-            <dd id="whatWrong"></dd>
-            <dt>Why it matters</dt>
-            <dd id="whyMatters"></dd>
-            <dt>How to fix it</dt>
-            <dd id="howFix"></dd>
-          </dl>
-        </article>
+      <!-- Transcript -->
+      <div id="transcript-card" class="card hidden">
+        <h4 class="card-title">Band Transcript</h4>
+        <div id="transcript-messages" class="transcript"></div>
+      </div>
 
-        <article class="panel">
-          <h2>Simulated Diff</h2>
-          <pre id="diff"></pre>
-        </article>
+      <!-- Test Cases -->
+      <div id="test-cases-card" class="card hidden">
+        <h4 class="card-title">Test Cases</h4>
+        <table id="test-table" class="test-table">
+          <thead><tr><th>Name</th><th>Input</th><th>Expected</th><th>Status</th></tr></thead>
+          <tbody id="test-body"></tbody>
+        </table>
+      </div>
 
-        <article class="panel">
-          <h2>Validation</h2>
-          <ul id="tests" class="tests"></ul>
-        </article>
-      </section>
-    </main>
-    <script src="app.js"></script>
-  </body>
+      <!-- Artifact -->
+      <div id="artifact-card" class="card hidden">
+        <h4 class="card-title">Artifact</h4>
+        <pre id="artifact-diff" class="diff-block"></pre>
+        <p id="artifact-summary" class="artifact-summary"></p>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <div id="error-display" class="card card-error hidden">
+      <h4>Error</h4>
+      <pre id="error-text"></pre>
+    </div>
+  </main>
+
+  <footer>
+    <div class="container footer-inner">
+      <p>
+        <strong>ProofGate</strong> — an auditable human apply gate for
+        AI-generated code changes.
+        <span class="sep">|</span>
+        <a href="https://github.com/itz1508/hackathon-band" target="_blank" rel="noopener">GitHub</a>
+        <span class="sep">|</span>
+        Hackathon submission
+      </p>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
 </html>
-
