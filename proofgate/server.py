@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -656,11 +656,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static dashboard files from the demo/ directory
-_demo_dir = os.path.join(os.path.dirname(__file__), "..", "demo")
-if os.path.isdir(_demo_dir):
-    app.mount("/", StaticFiles(directory=_demo_dir, html=True), name="dashboard")
-
 runner = BandRunner(delay_per_step=1.5)
 
 
@@ -670,7 +665,9 @@ async def health():
 
 
 @app.post("/api/run", status_code=201)
-async def run_job(req: RunJobRequest) -> RunJobResponse:
+async def run_job(
+    req: RunJobRequest, background_tasks: BackgroundTasks
+) -> RunJobResponse:
     if req.mode not in ("success", "failure"):
         raise HTTPException(status_code=422, detail="mode must be 'success' or 'failure'")
 
@@ -682,8 +679,8 @@ async def run_job(req: RunJobRequest) -> RunJobResponse:
     )
     _jobs[job_id] = job
 
-    # Kick off the simulation in the background
-    asyncio.create_task(runner.run(job))
+    # Kick off the simulation in the background using FastAPI's BackgroundTasks
+    background_tasks.add_task(runner.run, job)
 
     return RunJobResponse(job_id=job_id, status="queued")
 
@@ -722,6 +719,13 @@ async def get_job_results(job_id: str) -> JobResultsResponse:
         status=job.status.value,
         **{k: v for k, v in job.results.items() if k not in ("job_id", "status")},
     )
+
+
+# Serve static dashboard files from the demo/ directory
+# IMPORTANT: Mounted AFTER API routes so /api/* reaches handlers first
+_demo_dir = os.path.join(os.path.dirname(__file__), "..", "demo")
+if os.path.isdir(_demo_dir):
+    app.mount("/", StaticFiles(directory=_demo_dir, html=True), name="dashboard")
 
 
 # -------------------------------------------------------------
