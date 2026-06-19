@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ProofGate for Band</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <h1 class="logo">ProofGate <span class="logo-accent">for Band</span></h1>
+      <p class="tagline">Structured multi-agent resolution through Band</p>
+      <div class="badges">
+        <span class="badge">Five Specialized Agents</span>
+        <span class="badge">One Controlled Retry</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="workspace container">
+    <!-- Left: Operator Panel -->
+    <aside class="operator-chat" id="operator-chat">
+      <div class="panel-header">
+        <h2>Operator</h2>
+      </div>
+
+      <!-- Status -->
+      <div class="op-section">
+        <div class="op-status-grid" id="op-status-grid">
+          <div class="op-status-row"><span class="op-label">Entry mode</span><span class="op-value" id="st-entry-mode">Direct Band</span></div>
+          <div class="op-status-row"><span class="op-label">Runtime</span><span class="op-value" id="st-runtime">—</span></div>
+          <div class="op-status-row"><span class="op-label">Band room</span><span class="op-value" id="st-room">—</span></div>
+          <div class="op-status-row"><span class="op-label">Intake target</span><span class="op-value" id="st-intake">@itz1508/intake</span></div>
+          <div class="op-status-row"><span class="op-label">Current run</span><span class="op-value" id="st-run">None</span></div>
+        </div>
+      </div>
+
+      <!-- Runtime Toggle -->
+      <div class="op-section">
+        <div class="op-section-header">
+          <span class="op-section-title">Agent Runtime</span>
+          <button class="runtime-btn" id="runtime-btn">OFF</button>
+        </div>
+        <div class="runtime-roles" id="runtime-roles"></div>
+      </div>
+
+      <!-- Built-in Commands -->
+      <div class="op-section">
+        <span class="op-section-title">Commands</span>
+        <div class="command-grid" id="command-grid"></div>
+      </div>
+
+      <!-- Test Inputs -->
+      <div class="op-section">
+        <span class="op-section-title">Test Inputs</span>
+        <div class="test-input-list" id="test-input-list">
+          <span class="op-empty">No test inputs found</span>
+        </div>
+      </div>
+
+      <!-- Request -->
+      <div class="op-section">
+        <span class="op-section-title">Request</span>
+        <textarea id="chat-input" class="chat-input" placeholder="Describe the completed result you want the agents to produce...&#10;&#10;Examples: Fix the timeout bug in auth.py · Review auth.py for timeout risks · Verify the login flow" rows="4" maxlength="2000"></textarea>
+        <div class="routing-preview" id="routing-preview"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="op-section op-actions">
+        <button id="chat-send" class="btn-send" disabled>Send to Band</button>
+        <button id="chat-open-room" class="btn-secondary">Open Band Room</button>
+      </div>
+
+      <!-- Submission state -->
+      <div class="op-section">
+        <div id="submission-status" class="submission-status status-idle" role="status" aria-live="polite">Start the agent runtime to submit a workflow.</div>
+      </div>
+    </aside>
+
+    <!-- Right: Processing View -->
+    <div class="processing-view">
+      <!-- Workflow Path -->
+      <section class="workflow-inline">
+        <h2>Live Workflow Processing</h2>
+        <div id="workflow-steps-container">
+          <p class="workflow-pending">Submit a request to start the workflow.</p>
+        </div>
+        <div class="workflow-note" id="workflow-note"></div>
+      </section>
+
+      <!-- Delivered Result -->
+      <section class="result-panel" id="result-panel">
+        <h2>Delivered Result</h2>
+        <div class="result-card" id="result-card">
+          <p class="result-pending">Finalizing has not delivered a result yet.</p>
+        </div>
+      </section>
+
+      <!-- Band Conversation -->
+      <section class="terminal-panel">
+        <h2>Band Delivery Trace</h2>
+        <div class="terminal" id="terminal">
+          <div class="terminal-header">
+            <span class="terminal-dot red"></span>
+            <span class="terminal-dot yellow"></span>
+            <span class="terminal-dot green"></span>
+            <span class="terminal-title" id="terminal-title">proofgate.band.v1</span>
+          </div>
+          <div class="terminal-body" id="terminal-body">
+            <p class="terminal-pending">No Band events yet.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Stage Results -->
+      <section class="artifacts-panel">
+        <h2>Stage Results</h2>
+        <div class="artifact-tabs" id="artifact-tabs"></div>
+        <div class="artifact-content" id="artifact-content">
+          <p class="artifact-pending">Appears as each agent completes its role.</p>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Architecture -->
+  <section class="architecture-section">
+    <div class="container">
+      <h2>Architecture</h2>
+      <div class="arch-grid">
+        <div class="arch-card">
+          <h3>Band SDK</h3>
+          <p>Each role runs as an independent remote agent connected through Band. Band carries the structured handoffs between agents.</p>
+        </div>
+        <div class="arch-card">
+          <h3>Structured Packet</h3>
+          <p><code>proofgate.band.v1</code> preserves the objective, constraints, stage results, requirement status, routing state, retry count, and final result.</p>
+        </div>
+        <div class="arch-card">
+          <h3>Deterministic Routing</h3>
+          <p>Routing follows <code>requirements_met</code>. At most one isolation-guided retry is allowed before Finalizing.</p>
+        </div>
+        <div class="arch-card">
+          <h3>Event Mirror</h3>
+          <p>A read-only SQLite mirror records ordered Band events for replay and presentation.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>ProofGate uses five specialized agents on Band. Each handoff preserves the accumulated structured context. Finalizing delivers one terminal result and closes the workflow.</p>
+      <nav class="footer-links">
+        <a href="https://github.com/itz1508/hackathon-band" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://www.band.ai/" target="_blank" rel="noopener">Band.ai</a>
+        <a href="https://lablab.ai/ai-hackathons/band-of-agents-hackathon" target="_blank" rel="noopener">Hackathon</a>
+      </nav>
+    </div>
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
